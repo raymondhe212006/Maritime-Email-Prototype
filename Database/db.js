@@ -8,6 +8,7 @@ const db = new Database(path.join(__dirname, 'maritime.db'));
 db.exec(`
     CREATE TABLE IF NOT EXISTS shipments (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id  TEXT,
         subject     TEXT,
         body_preview TEXT,
         type        TEXT,
@@ -26,9 +27,9 @@ db.exec(`
 
 const insertShipment = db.prepare(`
     INSERT INTO shipments
-        (subject, body_preview, type, company, date_sent, tonnage_min, tonnage_max, load_port, discharge_port, cargo, laycan, laycanStart, laycanEnd)
+        (message_id, subject, body_preview, type, company, date_sent, tonnage_min, tonnage_max, load_port, discharge_port, cargo, laycan, laycanStart, laycanEnd)
     VALUES
-        (@subject, @body_preview, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @load_port, @discharge_port, @cargo, @laycan, @laycanStart, @laycanEnd)
+        (@message_id, @subject, @body_preview, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @load_port, @discharge_port, @cargo, @laycan, @laycanStart, @laycanEnd)
 `);
 
 
@@ -42,6 +43,7 @@ export function saveClassifications(queue) {
         const bodyPreview = queue[i].body_preview
 
         insertShipment.run({
+            message_id: queue[i].message_id,
             subject: subject ?? null,
             body_preview: bodyPreview,
             type: classifications.type,
@@ -74,8 +76,18 @@ const purgeOldShipments = db.prepare(`
     WHERE date_sent < datetime('now', '-14 days')
 `);
 
-export function purgeShipmentsOlderThanTwoWeeks() {
+export function purgeEmails() {
     const result = purgeOldShipments.run();
     console.log(`[db] purged ${result.changes} old shipments`);
     return result.changes;
+}
+
+const check_duplicate_sql = db.prepare(`
+    SELECT * FROM shipments
+    WHERE message_id = ?
+`);
+
+export function check_duplicate(message_id) {
+    const result = check_duplicate_sql.get(message_id);
+    return result;
 }

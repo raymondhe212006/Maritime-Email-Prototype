@@ -5,6 +5,7 @@ dotenv.config({ path: '../.env' });
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { classify } from '../External_Calls/classifier.js';
+import { check_duplicate } from '../Database/db.js';
 
 
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
@@ -33,9 +34,14 @@ export async function pollEmails(number) {
             const fullPath = `Emails/${file}`;
             const source = fs.readFileSync(fullPath);
             const email = await parseEmail({ uid: file }, source);
+
             if (email.from.includes("bulk@argo-oriental.com") || email.from.includes("email@ibroker.world")) {
                 continue;
             }
+            if (check_duplicate(email.messageId)) {
+                continue;
+            }
+
             if (DEBUG_LOGS) {
                 console.log(`[imap] ${i + 1} Email ${email.subject}`);
             }

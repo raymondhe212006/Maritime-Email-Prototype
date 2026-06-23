@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEmail } from '../Email_Polling/poll.js';
 import { classify } from '../External_Calls/classifier.js';
-import { getShipmentsBySubject, deleteShipmentsBySubject } from '../Database/db.js';
+import { getShipmentsBySubject, deleteShipmentsBySubject, check_duplicate, purgeEmails } from '../Database/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMAILS = path.join(__dirname, '..', 'Emails');
@@ -41,5 +41,36 @@ describe('DB persistence via classify()', { skip: skipReason }, () => {
         assert.ok(rows.length <= 3, `Expected at most 3 DB rows, got ${rows.length}`);
 
         deleteShipmentsBySubject(email.subject);
+    });
+
+    test('NEED 28/42K email: saved on first run, duplicate blocked at polling phase on second', { timeout: 60000 }, async () => {
+        const email = await parseEmail({ uid: 'test' }, readEml('NEED 2842K - DEL TO MAKE AUSSIE.eml'));
+        deleteShipmentsBySubject(email.subject);
+
+        // first run: no duplicate, classify and save
+        assert.ok(!check_duplicate(email.messageId), 'Should not be a duplicate before first classify');
+        await classify([email]);
+        const rows = getShipmentsBySubject(email.subject);
+        assert.ok(rows.length >= 1, `Expected at least 1 DB row after first classify, got ${rows.length}`);
+
+        // second run: polling phase detects the duplicate and would skip the email
+        assert.ok(check_duplicate(email.messageId), 'Should be detected as duplicate — polling phase would skip it');
+
+        deleteShipmentsBySubject(email.subject);
+    });
+
+    test('OUR OPEN TONNAGE email (Jun 8) is saved then purged as older than 14 days', { timeout: 60000 }, async () => {
+        const email = await parseEmail({ uid: 'test' }, readEml('OUR OPEN TONNAGE .eml'));
+        deleteShipmentsBySubject(email.subject);
+
+        await classify([email]);
+
+        const rowsBefore = getShipmentsBySubject(email.subject);
+        assert.ok(rowsBefore.length >= 1, `Expected at least 1 DB row after classify, got ${rowsBefore.length}`);
+
+        purgeEmails();
+
+        const rowsAfter = getShipmentsBySubject(email.subject);
+        assert.strictEqual(rowsAfter.length, 0, `Expected 0 rows after purge, got ${rowsAfter.length}`);
     });
 });
