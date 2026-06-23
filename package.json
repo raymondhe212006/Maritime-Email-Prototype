@@ -5,12 +5,18 @@
     "main": "index.js",
     "scripts": {
         "start": "node index.js",
-        "dev": "node index.js"
+        "dev": "node index.js",
+        "sandbox": "node sandbox.js",
+        "test": "node --test test/*.test.js"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.60.0",
+        "better-sqlite3": "^12.11.1",
         "dotenv": "^16.4.5",
         "imapflow": "^1.0.191",
         "mailparser": "^3.7.1"
+    },
+    "allowScripts": {
+        "better-sqlite3@12.11.1": true
     }
 }

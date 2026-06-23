@@ -1,8 +1,15 @@
+import fs from 'fs';
+import dotenv from 'dotenv';
+dotenv.config({ path: '../.env' });
+
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { First_Pass_Classifier } from '../External_Calls/classifier.js';
+import { classify } from '../External_Calls/classifier.js';
+
 
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
+const POLL_TYPE = Number(process.env.POLL_TYPE);
+const POLL_0_DEBUG_START = Number(process.env.POLL_0_DEBUG_START);
 
 const client = new ImapFlow({
     host: process.env.IMAP_HOST,
@@ -12,63 +19,73 @@ const client = new ImapFlow({
         user: process.env.IMAP_USER,
         pass: process.env.IMAP_PASS,
     },
-    tls: { rejectUnauthorized: false },
+    //tls: { rejectUnauthorized: false },
     logger: false
 });
 
 export async function pollEmails(number) {
-    await client.connect();
-    let lock = await client.getMailboxLock('INBOX');
-    console.log("Inbox connected")
-
     const emails = [];
-
-    try {
-        // Get recent/unread emails
-        const uids = await client.search();
-        console.log("Recieved Emails")
-
-        if (uids.length === 0) {
-            console.log('[imap] no emails found');
-            return;
-        }
-
-        const count = Math.min(number, uids.length);
-        for (let i = 0; i < count; i++) {
-            const latestUid = uids[uids.length - i - 1];
-            const fullMessage = await client.fetchOne(latestUid, {
-                uid: true,
-                envelope: true,
-                source: true,
-            });
-            const email = await parseEmail(fullMessage, fullMessage.source);
+    if (POLL_TYPE === 0) {
+        //read from /Emails/*.eml
+        const files = fs.readdirSync('Emails');
+        for (let i = POLL_0_DEBUG_START; i < POLL_0_DEBUG_START + number; i++) {
+            const file = files[i];
+            const fullPath = `Emails/${file}`;
+            const source = fs.readFileSync(fullPath);
+            const email = await parseEmail({ uid: file }, source);
+            if (email.from.includes("bulk@argo-oriental.com")) {
+                continue;
+            }
             if (DEBUG_LOGS) {
                 console.log(`[imap] ${i + 1} Email ${email.subject}`);
             }
             emails.push(email);
         }
-    } finally {
-        lock.release();
-        await client.logout();
     }
+    else if (POLL_TYPE === 1) {
+        await client.connect();
+        let lock = await client.getMailboxLock('INBOX');
+        console.log("Inbox connected")
 
-    for (let i = 0; i < emails.length; i++) {
-        if (emails[i].from.includes("bulk")) {
-            continue;
-        }
-        const type = await First_Pass_Classifier(emails[i].subject, emails[i].bodyText);
-        if (DEBUG_LOGS) {
-            console.log(`[classifier]  ${type}: ${i + 1} Email ${emails[i].subject}`);
-        }
-        if (type === 'MARITIME') {
-            const classification = await Second_Pass_Classifier(emails[i]);
-            if (DEBUG_LOGS) {
-                console.log(`[classifier]  ${classification}: ${i + 1} Email ${emails[i].subject}`);
+
+        try {
+            // Get recent/unread emails
+            const uids = await client.search();
+            console.log("Recieved Emails")
+
+            if (uids.length === 0) {
+                console.log('[imap] no emails found');
+                return;
             }
+
+            const count = Math.min(number, uids.length);
+            for (let i = 0; i < count; i++) {
+                const latestUid = uids[uids.length - i - 1];
+                const fullMessage = await client.fetchOne(latestUid, {
+                    uid: true,
+                    envelope: true,
+                    source: true,
+                });
+                const email = await parseEmail(fullMessage, fullMessage.source);
+                if (email.from.includes("bulk@argo-oriental.com")) {
+                    continue;
+                }
+                if (DEBUG_LOGS) {
+                    console.log(`[imap] ${i + 1} Email ${email.subject}`);
+                }
+                emails.push(email);
+            }
+        } finally {
+            lock.release();
+            await client.logout();
         }
     }
 
-    return 0
+    if (DEBUG_LOGS) {
+        console.log(`\n\nTotal Emails to classify: ${emails.length}\n\n`);
+    }
+    await classify(emails)
+    return null
 }
 
 export async function parseEmail(message, source) {

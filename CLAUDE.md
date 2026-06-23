@@ -22,7 +22,7 @@ The classification pipeline runs sequentially after all emails are fetched:
 2. **`Email_Polling/poll.js`** — connects to IMAP, fetches the `n` most recent emails (newest-first), parses each with `mailparser`, releases the lock, then runs the classification pipeline. Emails from senders whose address contains `"bulk"` are skipped before classification.
 3. **`External_Calls/classifier.js`** — two Claude-based classifiers:
    - `First_Pass_Classifier(subject, bodyText)` — Haiku call; returns `"MARITIME"` or `"UNKNOWN"`.
-   - `Second_Pass_Classifier(email)` — stub, not yet implemented; intended to classify MARITIME emails into finer-grained types.
+   - `Second_Pass_Classifier(email)` — Sonnet call; classifies MARITIME emails into `"cargo"`, `"shipping"`, or `"unknown"` and extracts fields (tonnage, ports, laycan, cargo type, vessel type, confidence, reason).
 
 The IMAP lock is released before classification begins — all emails are fetched first, then classified in a separate loop.
 
@@ -38,6 +38,16 @@ The IMAP lock is released before classification begins — all emails are fetche
 | `POLL_INTERVAL_MINUTES` | Intended polling interval if a scheduler is added (default 15) |
 | `PORT` | HTTP server port if a web layer is added (default 3000) |
 | `DB_RETENTION_DAYS` | Record retention duration if storage is added (default 30) |
+
+## Testing
+
+After every code change, run `npm test` and iterate until all tests pass before considering the task done.
+
+```bash
+npm test
+```
+
+Tests live in `test/*.test.js` and use Node's built-in `node:test` module. Do not mark work complete if any test is failing.
 
 ## Key Notes
 
