@@ -19,35 +19,63 @@ db.exec(`
         discharge_port TEXT,
         cargo       TEXT,
         laycan      TEXT,
-        created_at  TEXT DEFAULT (datetime('now'))
+        laycanStart TEXT,
+        laycanEnd   TEXT
     )
 `);
 
 const insertShipment = db.prepare(`
     INSERT INTO shipments
-        (subject, body_preview, type, company, date_sent, tonnage_min, tonnage_max, load_port, discharge_port, cargo, laycan)
+        (subject, body_preview, type, company, date_sent, tonnage_min, tonnage_max, load_port, discharge_port, cargo, laycan, laycanStart, laycanEnd)
     VALUES
-        (@subject, @body_preview, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @load_port, @discharge_port, @cargo, @laycan)
+        (@subject, @body_preview, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @load_port, @discharge_port, @cargo, @laycan, @laycanStart, @laycanEnd)
 `);
 
-export function saveClassifications(email, classifications) {
-    const company = email.from?.match(/@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)?.[0]?.toLowerCase() ?? null;
-    const dateSent = email.date ? new Date(email.date).toISOString() : null;
-    const bodyPreview = (email.bodyText || '').slice(0, 300);
 
-    for (const c of classifications) {
+export function saveClassifications(queue) {
+    for (let i = 0; i < queue.length; i++) {
+        const subject = queue[i].subject;
+        const company = queue[i].company;
+        const time_sent = queue[i].time_sent;
+        const classifications = queue[i].classifications;
+        const dateSent = time_sent ? new Date(time_sent).toISOString() : null;
+        const bodyPreview = queue[i].body_preview
+
         insertShipment.run({
-            subject: email.subject ?? null,
+            subject: subject ?? null,
             body_preview: bodyPreview,
-            type: c.type,
-            company,
+            type: classifications.type,
+            company: company,
             date_sent: dateSent,
-            tonnage_min: c.tonnage?.valueMin ?? null,
-            tonnage_max: c.tonnage?.valueMax ?? null,
-            load_port: c.loadPort,
-            discharge_port: c.dischargePort,
-            cargo: c.cargo,
-            laycan: c.laycan,
+            tonnage_min: classifications.tonnage?.valueMin ?? null,
+            tonnage_max: classifications.tonnage?.valueMax ?? null,
+            load_port: classifications.loadPort,
+            discharge_port: classifications.dischargePort,
+            cargo: classifications.cargo,
+            laycan: classifications.laycan,
+            laycanStart: classifications.laycanStart,
+            laycanEnd: classifications.laycanEnd,
         });
     }
+}
+const selectBySubject = db.prepare('SELECT * FROM shipments WHERE subject = ?');
+const deleteBySubject = db.prepare('DELETE FROM shipments WHERE subject = ?');
+
+export function getShipmentsBySubject(subject) {
+    return selectBySubject.all(subject);
+}
+
+export function deleteShipmentsBySubject(subject) {
+    deleteBySubject.run(subject);
+}
+
+const purgeOldShipments = db.prepare(`
+    DELETE FROM shipments
+    WHERE date_sent < datetime('now', '-14 days')
+`);
+
+export function purgeShipmentsOlderThanTwoWeeks() {
+    const result = purgeOldShipments.run();
+    console.log(`[db] purged ${result.changes} old shipments`);
+    return result.changes;
 }

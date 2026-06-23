@@ -39,6 +39,18 @@ The IMAP lock is released before classification begins — all emails are fetche
 | `PORT` | HTTP server port if a web layer is added (default 3000) |
 | `DB_RETENTION_DAYS` | Record retention duration if storage is added (default 30) |
 
+## Database
+
+The SQLite database is created automatically at `Database/maritime.db` on first run.
+
+To reset it:
+
+```bash
+rm Database/maritime.db
+```
+
+The file is gitignored and will be recreated with an empty schema on the next run.
+
 ## Testing
 
 After every code change, run `npm test` and iterate until all tests pass before considering the task done.

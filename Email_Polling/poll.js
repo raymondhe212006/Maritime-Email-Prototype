@@ -33,7 +33,7 @@ export async function pollEmails(number) {
             const fullPath = `Emails/${file}`;
             const source = fs.readFileSync(fullPath);
             const email = await parseEmail({ uid: file }, source);
-            if (email.from.includes("bulk@argo-oriental.com")) {
+            if (email.from.includes("bulk@argo-oriental.com") || email.from.includes("email@ibroker.world")) {
                 continue;
             }
             if (DEBUG_LOGS) {

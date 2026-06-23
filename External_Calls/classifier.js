@@ -162,10 +162,10 @@ export async function classify(emails) {
     }
 
     let second_chunk = [];
-    let email_company = [];
-    let time_sent = [];
+    let db_queue = []
     for (let i = 0; i < second_pass_queue.length; i++) {
         second_chunk.push(second_pass_queue[i]);
+
         if ((i != 0 && i % CLASSIFY_SECOND_AMO === 0) || i == second_pass_queue.length - 1) {
             if (DEBUG_LOGS) {
                 console.log(`[classifier] Second Pass: processing ${second_chunk.length} emails`);
@@ -175,10 +175,31 @@ export async function classify(emails) {
             }
 
             const result = parse_second(await Second_Pass_Classifier(second_chunk));
+
+            for (let i = 0; i < result.length; i++) {
+                const subject = second_chunk[i].subject
+                const body_preview = second_chunk[i].bodyText.slice(0, 300)
+                const company = '@' + second_chunk[i].from.split('@')[1];
+                const date_sent = second_chunk[i].date
+                for (let j = 0; j < result[i].length; j++) {
+                    if (result[i][j].type != "unknown") {
+                        db_queue.push({
+                            subject: subject,
+                            body_preview: body_preview,
+                            company: company,
+                            time_sent: date_sent,
+                            classifications: result[i][j],
+                        });
+                    }
+                }
+            }
             if (DEBUG_LOGS) {
                 console.log(JSON.stringify(result, null, 2));
             }
             second_chunk = [];
+
         }
     }
+
+    saveClassifications(db_queue);
 }
