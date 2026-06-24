@@ -4,27 +4,20 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
+const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
 const DEBUG_PASS1 = process.env.DEBUG_PASS1 === 'true';
 const CLASSIFY_FIRST_AMO = Number(process.env.CLASSIFY_FIRST_AMO || 50);
-const CLASSIFY_SECOND_AMO = Number(process.env.CLASSIFY_SECOND_AMO || 20);
+const CLASSIFY_SECOND_AMO = Number(process.env.CLASSIFY_SECOND_AMO || 5);
+
 
 
 const FIRST_PASS_TEXT = 'Classify each numbered email as "MARITIME" (vessels, cargo) or "UNKNOWN". Return ONLY a JSON array in input order. No markdown. Example: ["MARITIME","UNKNOWN"]'
 
-const SECOND_PASS_TEXT = `You are a maritime shipping classifier. Given numbered emails, return ONLY a JSON array — one element per email in input order. Each element is an array of shipment objects (one per distinct shipment/vessel in that email, or a single-element array if only one).
+const SECOND_PASS_TEXT = `Maritime shipping classifier. Return ONLY a JSON array, one element per email in input order. Each element is an array of shipment objects. No markdown, no extra nesting.
 
-No markdown. Each shipment object has exactly: type, tonnage (raw/valueMin/valueMax/unit/sizeClass), loadPort, dischargePort, laycan, laycanStart, laycanEnd, cargo.
+Example for 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","cgo":"Coal"}],[{"t":"shipping","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"cgo":null}]]
 
-type: cargo=charterer needs vessel; shipping=owner offers vessel; unknown=S&P/sale/spam/ambiguous
-tonnage.raw: exact string as written, null if absent
-tonnage.valueMin/valueMax: inferred integer range in MT (e.g. "70K"→68000/72000; "Panamax"→60000/80000; "about 50K"→45000/55000); null only if nothing can be inferred
-tonnage.unit: as written or null
-tonnage.sizeClass: vessel size class or null
-loadPort/dischargePort: port name or null
-laycan: exact date range as written or null
-laycanStart: inferred ISO date YYYY-MM-DD for start of laycan window, null if cannot determine
-laycanEnd: inferred ISO date YYYY-MM-DD for end of laycan window, null if cannot determine
-cargo: commodity type or null`;
+Fields: t (cargo=charterer needs vessel; shipping=owner offers vessel; unknown=S&P/sale/spam/ambiguous), ton.r=tonnage as written, ton.min/max=MT integer range, ton.u=unit, ton.sc=size class, lp=loadPort, dp=dischargePort, lc=laycan as written, lcs/lce=ISO laycan start/end, cgo=cargo. Use null when absent.`;
 
 function stripMarkdown(str) {
     return str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
@@ -61,22 +54,22 @@ export async function First_Pass_Classifier(emails) {
 
 function normalizeSecondPassResult(parsed) {
     const VALID_TYPES = ['cargo', 'shipping', 'unknown'];
-    const type = VALID_TYPES.includes(parsed.type) ? parsed.type : 'unknown';
+    const type = VALID_TYPES.includes(parsed.t) ? parsed.t : 'unknown';
     return {
         type,
         tonnage: {
-            valueMin: typeof parsed.tonnage?.valueMin === 'number' ? parsed.tonnage.valueMin : null,
-            valueMax: typeof parsed.tonnage?.valueMax === 'number' ? parsed.tonnage.valueMax : null,
-            unit: parsed.tonnage?.unit ?? null,
-            raw: parsed.tonnage?.raw ?? null,
-            sizeClass: parsed.tonnage?.sizeClass ?? null,
+            valueMin: typeof parsed.ton?.min === 'number' ? parsed.ton.min : null,
+            valueMax: typeof parsed.ton?.max === 'number' ? parsed.ton.max : null,
+            unit: parsed.ton?.u ?? null,
+            raw: parsed.ton?.r ?? null,
+            sizeClass: parsed.ton?.sc ?? null,
         },
-        loadPort: parsed.loadPort ?? null,
-        dischargePort: parsed.dischargePort ?? null,
-        laycan: parsed.laycan ?? null,
-        laycanStart: parsed.laycanStart ?? null,
-        laycanEnd: parsed.laycanEnd ?? null,
-        cargo: parsed.cargo ?? null,
+        loadPort: parsed.lp ?? null,
+        dischargePort: parsed.dp ?? null,
+        laycan: parsed.lc ?? null,
+        laycanStart: parsed.lcs ?? null,
+        laycanEnd: parsed.lce ?? null,
+        cargo: parsed.cgo ?? null,
     };
 }
 
@@ -145,7 +138,7 @@ export async function classify(emails) {
             if (DEBUG_LOGS) {
                 console.log(result);
             }
-            for (let j = 0; j < result.length; j++) {
+            for (let j = 0; j < Math.min(result.length, first_chunk.length); j++) {
                 if (result[j] === 'MARITIME') {
                     second_pass_queue.push(first_chunk[j]);
                 }
@@ -157,7 +150,7 @@ export async function classify(emails) {
         return null;
     }
 
-    if (DEBUG_LOGS) {
+    if (DEBUG_LOGS || LITE_DEBUG) {
         console.log(`\n\nTotal Maritime Emails to classify: ${second_pass_queue.length}\n\n`);
     }
 
@@ -176,7 +169,7 @@ export async function classify(emails) {
 
             const result = parse_second(await Second_Pass_Classifier(second_chunk));
 
-            for (let i = 0; i < result.length; i++) {
+            for (let i = 0; i < Math.min(result.length, second_chunk.length); i++) {
                 const message_id = second_chunk[i].messageId;
                 const subject = second_chunk[i].subject;
                 const body_preview = second_chunk[i].bodyText.slice(0, 300);

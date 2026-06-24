@@ -7,6 +7,7 @@ import { simpleParser } from 'mailparser';
 import { check_duplicate } from '../Database/db.js';
 
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
+const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
 
 
 const client = new ImapFlow({
@@ -34,13 +35,13 @@ export async function pollEmails(start, number, polltype) {
             const email = await parseEmail({ uid: file }, source);
 
             if (email.from.includes("bulk@argo-oriental.com") || email.from.includes("email@ibroker.world")) {
-                if (DEBUG_LOGS) {
+                if (DEBUG_LOGS || LITE_DEBUG) {
                     console.log("blacklist: " + email.subject);
                 }
                 continue;
             }
             if (check_duplicate(email.messageId)) {
-                if (DEBUG_LOGS) {
+                if (DEBUG_LOGS || LITE_DEBUG) {
                     console.log("duplicate: " + email.subject);
                 }
                 continue;
@@ -91,7 +92,7 @@ export async function pollEmails(start, number, polltype) {
         }
     }
 
-    if (DEBUG_LOGS) {
+    if (DEBUG_LOGS || LITE_DEBUG) {
         console.log(`\n\nTotal Emails to classify: ${emails.length}\n\n`);
     }
     return emails
