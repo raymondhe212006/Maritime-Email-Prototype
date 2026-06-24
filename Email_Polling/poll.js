@@ -4,13 +4,10 @@ dotenv.config({ path: '../.env' });
 
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { classify } from '../External_Calls/classifier.js';
 import { check_duplicate } from '../Database/db.js';
 
-
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
-const POLL_TYPE = Number(process.env.POLL_TYPE);
-const POLL_0_DEBUG_START = Number(process.env.POLL_0_DEBUG_START);
+
 
 const client = new ImapFlow({
     host: process.env.IMAP_HOST,
@@ -24,21 +21,28 @@ const client = new ImapFlow({
     logger: false
 });
 
-export async function pollEmails(number) {
+export async function pollEmails(start, number, polltype) {
     const emails = [];
-    if (POLL_TYPE === 0) {
+    if (polltype === 0) {
         //read from /Emails/*.eml
         const files = fs.readdirSync('Emails');
-        for (let i = POLL_0_DEBUG_START; i < POLL_0_DEBUG_START + number; i++) {
+        const end = Math.min(start + number, files.length);
+        for (let i = start; i < end; i++) {
             const file = files[i];
             const fullPath = `Emails/${file}`;
             const source = fs.readFileSync(fullPath);
             const email = await parseEmail({ uid: file }, source);
 
             if (email.from.includes("bulk@argo-oriental.com") || email.from.includes("email@ibroker.world")) {
+                if (DEBUG_LOGS) {
+                    console.log("blacklist: " + email.subject);
+                }
                 continue;
             }
             if (check_duplicate(email.messageId)) {
+                if (DEBUG_LOGS) {
+                    console.log("duplicate: " + email.subject);
+                }
                 continue;
             }
 
@@ -90,8 +94,7 @@ export async function pollEmails(number) {
     if (DEBUG_LOGS) {
         console.log(`\n\nTotal Emails to classify: ${emails.length}\n\n`);
     }
-    await classify(emails)
-    return null
+    return emails
 }
 
 export async function parseEmail(message, source) {

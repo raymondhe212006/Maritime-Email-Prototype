@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEmail } from '../Email_Polling/poll.js';
 import { classify } from '../External_Calls/classifier.js';
-import { getShipmentsBySubject, deleteShipmentsBySubject, check_duplicate, purgeEmails } from '../Database/db.js';
+import { saveClassifications, getShipmentsBySubject, deleteShipmentsBySubject, check_duplicate, purgeEmails } from '../Database/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMAILS = path.join(__dirname, '..', 'Emails');
@@ -22,7 +22,7 @@ describe('DB persistence via classify()', { skip: skipReason }, () => {
         const email = await parseEmail({ uid: 'test' }, readEml('AC CHANG MYUNG PNW  SKOR 13 JUL,2026 ONWARDS .eml'));
         deleteShipmentsBySubject(email.subject);
 
-        await classify([email]);
+        saveClassifications(await classify([email]));
 
         const rows = getShipmentsBySubject(email.subject);
         assert.ok(rows.length >= 1, `Expected at least 1 DB row, got ${rows.length}`);
@@ -34,7 +34,7 @@ describe('DB persistence via classify()', { skip: skipReason }, () => {
         const email = await parseEmail({ uid: 'test' }, readEml('9,500MT OR 5,000MT X 2 SHIPMENTS - SCRAP - EX VLADIVOSTOK TO INCHON.eml'));
         deleteShipmentsBySubject(email.subject);
 
-        await classify([email]);
+        saveClassifications(await classify([email]));
 
         const rows = getShipmentsBySubject(email.subject);
         assert.ok(rows.length >= 2, `Expected at least 2 DB rows, got ${rows.length}`);
@@ -49,7 +49,7 @@ describe('DB persistence via classify()', { skip: skipReason }, () => {
 
         // first run: no duplicate, classify and save
         assert.ok(!check_duplicate(email.messageId), 'Should not be a duplicate before first classify');
-        await classify([email]);
+        saveClassifications(await classify([email]));
         const rows = getShipmentsBySubject(email.subject);
         assert.ok(rows.length >= 1, `Expected at least 1 DB row after first classify, got ${rows.length}`);
 
@@ -63,7 +63,7 @@ describe('DB persistence via classify()', { skip: skipReason }, () => {
         const email = await parseEmail({ uid: 'test' }, readEml('OUR OPEN TONNAGE .eml'));
         deleteShipmentsBySubject(email.subject);
 
-        await classify([email]);
+        saveClassifications(await classify([email]));
 
         const rowsBefore = getShipmentsBySubject(email.subject);
         assert.ok(rowsBefore.length >= 1, `Expected at least 1 DB row after classify, got ${rowsBefore.length}`);

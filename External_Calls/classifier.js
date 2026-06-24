@@ -5,8 +5,8 @@ dotenv.config({ path: '../.env' });
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const DEBUG_PASS1 = process.env.DEBUG_PASS1 === 'true';
-const CLASSIFY_FIRST_AMO = Number(process.env.CLASSIFY_FIRST_AMO || 10);
-const CLASSIFY_SECOND_AMO = Number(process.env.CLASSIFY_SECOND_AMO || 10);
+const CLASSIFY_FIRST_AMO = Number(process.env.CLASSIFY_FIRST_AMO || 50);
+const CLASSIFY_SECOND_AMO = Number(process.env.CLASSIFY_SECOND_AMO || 20);
 
 
 const FIRST_PASS_TEXT = 'Classify each numbered email as "MARITIME" (vessels, cargo) or "UNKNOWN". Return ONLY a JSON array in input order. No markdown. Example: ["MARITIME","UNKNOWN"]'
@@ -203,5 +203,5 @@ export async function classify(emails) {
         }
     }
 
-    saveClassifications(db_queue);
+    return db_queue
 }

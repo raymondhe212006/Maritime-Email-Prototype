@@ -7,12 +7,14 @@
         "start": "node index.js",
         "dev": "node index.js",
         "sandbox": "node sandbox.js",
-        "test": "node --test test/*.test.js"
+        "test": "node --test test/*.test.js",
+        "website": "node Website/server.js"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.60.0",
         "better-sqlite3": "^12.11.1",
         "dotenv": "^16.4.5",
+        "express": "^5.2.1",
         "imapflow": "^1.0.191",
         "mailparser": "^3.7.1"
     },
