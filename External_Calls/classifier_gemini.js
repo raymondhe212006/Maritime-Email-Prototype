@@ -197,9 +197,17 @@ export async function classify(emails) {
                 const date_sent = second_chunk[i].date
                 for (let j = 0; j < result[i].length; j++) {
                     if (result[i][j].type != "unknown") {
-                        if (result[i][j].tonnage.valueMin === result[i][j].tonnage.valueMax) {
-                            result[i][j].tonnage.valueMin = Math.round(result[i][j].tonnage.valueMin * 0.95);
-                            result[i][j].tonnage.valueMax = Math.round(result[i][j].tonnage.valueMax * 1.05);
+                        if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMin < 1000) {
+                            result[i][j].tonnage.valueMin *= 1000;
+                        }
+                        if (result[i][j].tonnage.valueMax != null && result[i][j].tonnage.valueMax < 1000) {
+                            result[i][j].tonnage.valueMax *= 1000;
+                        }
+                        const tMin = result[i][j].tonnage.valueMin;
+                        const tMax = result[i][j].tonnage.valueMax;
+                        if (tMin != null && tMax != null && tMin === tMax) {
+                            result[i][j].tonnage.valueMin = Math.round(tMin * 0.95);
+                            result[i][j].tonnage.valueMax = Math.round(tMax * 1.05);
                         }
                         db_queue.push({
                             message_id: message_id,

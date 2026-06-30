@@ -211,17 +211,19 @@ export async function classify(emails) {
                 const date_sent = second_chunk[i].date
                 for (let j = 0; j < result[i].length; j++) {
                     if (result[i][j].type != "unknown") {
-                        // Sometimes models miss the k 
-                        if (result[i][j].tonnage.valueMin < 1000) {
-                            result[i][j].tonnage.valueMin * 1000;
+                        // Sometimes models miss the K suffix (10K → should be 10000)
+                        if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMin < 1000) {
+                            result[i][j].tonnage.valueMin *= 1000;
                         }
-                        if (result[i][j].tonnage.valueMax < 1000) {
-                            result[i][j].tonnage.valueMax * 1000;
+                        if (result[i][j].tonnage.valueMax != null && result[i][j].tonnage.valueMax < 1000) {
+                            result[i][j].tonnage.valueMax *= 1000;
                         }
-                        // set lenient range
-                        if (result[i][j].tonnage.valueMin === result[i][j].tonnage.valueMax) {
-                            result[i][j].tonnage.valueMin = Math.round(result[i][j].tonnage.valueMin * 0.95);
-                            result[i][j].tonnage.valueMax = Math.round(result[i][j].tonnage.valueMax * 1.05);
+                        // set lenient range when a single point value was given
+                        const tMin = result[i][j].tonnage.valueMin;
+                        const tMax = result[i][j].tonnage.valueMax;
+                        if (tMin != null && tMax != null && tMin === tMax) {
+                            result[i][j].tonnage.valueMin = Math.round(tMin * 0.95);
+                            result[i][j].tonnage.valueMax = Math.round(tMax * 1.05);
                         }
                         third_pass_queue.push({
                             message_id: message_id,

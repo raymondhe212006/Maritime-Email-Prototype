@@ -10,17 +10,19 @@ const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
 
 
-const client = new ImapFlow({
-    host: process.env.IMAP_HOST,
-    port: Number(process.env.IMAP_PORT || 993),
-    secure: true,
-    auth: {
-        user: process.env.IMAP_USER,
-        pass: process.env.IMAP_PASS,
-    },
-    tls: { rejectUnauthorized: true },
-    logger: false
-});
+function createImapClient() {
+    return new ImapFlow({
+        host: process.env.IMAP_HOST,
+        port: Number(process.env.IMAP_PORT || 993),
+        secure: true,
+        auth: {
+            user: process.env.IMAP_USER,
+            pass: process.env.IMAP_PASS,
+        },
+        tls: { rejectUnauthorized: true },
+        logger: false
+    });
+}
 
 export async function pollEmails(start, number, polltype) {
     const emails = [];
@@ -54,6 +56,7 @@ export async function pollEmails(start, number, polltype) {
         }
     }
     else if (polltype === 1) {
+        const client = createImapClient();
         await client.connect();
         let lock = await client.getMailboxLock('INBOX');
         console.log("Inbox connected")
