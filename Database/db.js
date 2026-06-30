@@ -16,6 +16,8 @@ db.exec(`
         date_sent   TEXT,
         tonnage_min INTEGER,
         tonnage_max INTEGER,
+        tonnage_raw TEXT,
+        size_class  TEXT,
         load_port   TEXT,
         load_country TEXT,
         discharge_port TEXT,
@@ -27,11 +29,15 @@ db.exec(`
     )
 `);
 
+for (const col of ['tonnage_raw TEXT', 'size_class TEXT']) {
+    try { db.exec(`ALTER TABLE shipments ADD COLUMN ${col}`); } catch {}
+}
+
 const insertShipment = db.prepare(`
     INSERT INTO shipments
-        (message_id, subject, body_preview, type, company, date_sent, tonnage_min, tonnage_max, load_port, load_country, discharge_port, discharge_country, cargo, laycan, laycanStart, laycanEnd)
+        (message_id, subject, body_preview, type, company, date_sent, tonnage_min, tonnage_max, tonnage_raw, size_class, load_port, load_country, discharge_port, discharge_country, cargo, laycan, laycanStart, laycanEnd)
     VALUES
-        (@message_id, @subject, @body_preview, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @load_port, @load_country, @discharge_port, @discharge_country, @cargo, @laycan, @laycanStart, @laycanEnd)
+        (@message_id, @subject, @body_preview, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @tonnage_raw, @size_class, @load_port, @load_country, @discharge_port, @discharge_country, @cargo, @laycan, @laycanStart, @laycanEnd)
 `);
 
 
@@ -53,6 +59,8 @@ export function saveClassifications(queue) {
             date_sent: dateSent,
             tonnage_min: classifications.tonnage?.valueMin ?? null,
             tonnage_max: classifications.tonnage?.valueMax ?? null,
+            tonnage_raw: classifications.tonnage?.raw ?? null,
+            size_class: classifications.tonnage?.sizeClass ?? null,
             load_port: classifications.loadPort,
             load_country: classifications.loadCountry,
             discharge_port: classifications.dischargePort,
