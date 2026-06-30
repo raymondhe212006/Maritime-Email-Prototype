@@ -197,6 +197,14 @@ export async function classify(emails) {
                 const date_sent = second_chunk[i].date
                 for (let j = 0; j < result[i].length; j++) {
                     if (result[i][j].type != "unknown") {
+                        // TODO: size_class-only entries (e.g. "Panamax") have no numeric tonnage —
+                        // in future, manually map known size classes to MT ranges here
+                        if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMax === null) {
+                            result[i][j].tonnage.valueMax = result[i][j].tonnage.valueMin;
+                        }
+                        if (result[i][j].tonnage.valueMax != null && result[i][j].tonnage.valueMin === null) {
+                            result[i][j].tonnage.valueMin = result[i][j].tonnage.valueMax;
+                        }
                         if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMin < 1000) {
                             result[i][j].tonnage.valueMin *= 1000;
                         }

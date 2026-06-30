@@ -211,6 +211,8 @@ export async function classify(emails) {
                 const date_sent = second_chunk[i].date
                 for (let j = 0; j < result[i].length; j++) {
                     if (result[i][j].type != "unknown") {
+                        // TODO: size_class-only entries (e.g. "Panamax") have no numeric tonnage —
+                        // in future, manually map known size classes to MT ranges here
                         // Sometimes models miss the K suffix (10K → should be 10000)
                         if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMin < 1000) {
                             result[i][j].tonnage.valueMin *= 1000;
