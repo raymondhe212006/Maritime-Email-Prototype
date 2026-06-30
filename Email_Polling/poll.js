@@ -13,12 +13,12 @@ const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
 const client = new ImapFlow({
     host: process.env.IMAP_HOST,
     port: Number(process.env.IMAP_PORT || 993),
-    secure: process.env.IMAP_SECURE,
+    secure: true,
     auth: {
         user: process.env.IMAP_USER,
         pass: process.env.IMAP_PASS,
     },
-    //tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: true },
     logger: false
 });
 
@@ -53,43 +53,43 @@ export async function pollEmails(start, number, polltype) {
             emails.push(email);
         }
     }
-    else if (POLL_TYPE === 1) {
+    else if (polltype === 1) {
         await client.connect();
         let lock = await client.getMailboxLock('INBOX');
         console.log("Inbox connected")
 
 
-        try {
-            // Get recent/unread emails
-            const uids = await client.search();
-            console.log("Recieved Emails")
+        // try {
+        //     // Get recent/unread emails
+        //     const uids = await client.search();
+        //     console.log("Recieved Emails")
 
-            if (uids.length === 0) {
-                console.log('[imap] no emails found');
-                return;
-            }
+        //     if (uids.length === 0) {
+        //         console.log('[imap] no emails found');
+        //         return;
+        //     }
 
-            const count = Math.min(number, uids.length);
-            for (let i = 0; i < count; i++) {
-                const latestUid = uids[uids.length - i - 1];
-                const fullMessage = await client.fetchOne(latestUid, {
-                    uid: true,
-                    envelope: true,
-                    source: true,
-                });
-                const email = await parseEmail(fullMessage, fullMessage.source);
-                if (email.from.includes("bulk@argo-oriental.com")) {
-                    continue;
-                }
-                if (DEBUG_LOGS) {
-                    console.log(`[imap] ${i + 1} Email ${email.subject}`);
-                }
-                emails.push(email);
-            }
-        } finally {
-            lock.release();
-            await client.logout();
-        }
+        //     const count = Math.min(number, uids.length);
+        //     for (let i = 0; i < count; i++) {
+        //         const latestUid = uids[uids.length - i - 1];
+        //         const fullMessage = await client.fetchOne(latestUid, {
+        //             uid: true,
+        //             envelope: true,
+        //             source: true,
+        //         });
+        //         const email = await parseEmail(fullMessage, fullMessage.source);
+        //         if (email.from.includes("bulk@argo-oriental.com")) {
+        //             continue;
+        //         }
+        //         if (DEBUG_LOGS) {
+        //             console.log(`[imap] ${i + 1} Email ${email.subject}`);
+        //         }
+        //         //emails.push(email);
+        //     }
+        // } finally {
+        //     lock.release();
+        //     await client.logout();
+        // }
     }
 
     if (DEBUG_LOGS || LITE_DEBUG) {
