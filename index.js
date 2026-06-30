@@ -99,8 +99,18 @@ else if (POLL_TYPE === 1) {
         }
     }
 
+    const isWithinPollingHours = () => {
+        const hour = new Date().getHours();
+        return hour >= 20 || hour < 6;
+    };
+
+    const scheduleNext = () => {
+        const delay = isWithinPollingHours() ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
+        setTimeout(async () => { await run(); scheduleNext(); }, delay);
+    };
+
     run();
-    setInterval(run, 15 * 60 * 1000);
+    scheduleNext();
 
 }
 else {
