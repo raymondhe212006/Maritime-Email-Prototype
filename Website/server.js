@@ -116,7 +116,6 @@ const HTML = `<!DOCTYPE html>
   <input id="dischargeCountryFilter" placeholder="Discharge country…" oninput="render()">
   <input id="companyFilter" placeholder="Company…" oninput="render()">
   <input id="loadFilter" type="text" placeholder="Tonnage (MT)…" style="width:160px" oninput="render()">
-  <input id="tonnageRawFilter" placeholder="Tonnage raw…" oninput="render()">
   <input id="sizeClassFilter" placeholder="Size class…" oninput="render()">
   <input id="dateFilter" type="date" oninput="render()" title="Laycan date">
   <input id="sentDateFilter" type="date" oninput="render()" title="Sent on or after">
@@ -140,7 +139,6 @@ const HTML = `<!DOCTYPE html>
         <th>Load Country</th>
         <th>Discharge Port</th>
         <th>Discharge Country</th>
-        <th>Tonnage Raw</th>
         <th>Size Class</th>
         <th>Min (MT)</th>
         <th>Max (MT)</th>
@@ -200,7 +198,6 @@ const HTML = `<!DOCTYPE html>
     const dp = document.getElementById('dischargePortFilter').value;
     const dc = document.getElementById('dischargeCountryFilter').value;
     const co = document.getElementById('companyFilter').value;
-    const tr = document.getElementById('tonnageRawFilter').value;
     const sc = document.getElementById('sizeClassFilter').value;
     const loadVal = document.getElementById('loadFilter').value;
     const dateVal = document.getElementById('dateFilter').value;
@@ -213,7 +210,6 @@ const HTML = `<!DOCTYPE html>
       if (!matchesAny(r.discharge_port, dp)) return false;
       if (!matchesAny(r.discharge_country, dc)) return false;
       if (!matchesAny(r.company, co)) return false;
-      if (!matchesAny(r.tonnage_raw, tr)) return false;
       if (!matchesAny(r.size_class, sc)) return false;
       if (loadVal) {
         const loadTerms = terms(loadVal);
@@ -240,7 +236,6 @@ const HTML = `<!DOCTYPE html>
       <td>\${n(r.load_country)}</td>
       <td>\${n(r.discharge_port)}</td>
       <td>\${n(r.discharge_country)}</td>
-      <td>\${n(r.tonnage_raw)}</td>
       <td>\${n(r.size_class)}</td>
       <td class="tonnage">\${fmt(r.tonnage_min)}</td>
       <td class="tonnage">\${fmt(r.tonnage_max)}</td>
