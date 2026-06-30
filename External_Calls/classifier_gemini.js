@@ -1,13 +1,14 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from "@google/genai";
 import dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
 const DEBUG_PASS1 = process.env.DEBUG_PASS1 === 'true';
 const CLASSIFY_FIRST_AMO = Number(process.env.CLASSIFY_FIRST_AMO || 50);
 const CLASSIFY_SECOND_AMO = Number(process.env.CLASSIFY_SECOND_AMO || 5);
-const CLASSIFY_THIRD_AMO = Number(process.env.CLASSIFY_THIRD_AMO || 50);
+
+
 
 const FIRST_PASS_TEXT = 'Classify each numbered email as "MARITIME" (vessels, cargo) or "UNKNOWN". Return ONLY a JSON array in input order. No markdown. Example: ["MARITIME","UNKNOWN"]'
 
@@ -17,10 +18,24 @@ Example for 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u
 
 Fields: t (cargo=charterer needs vessel; shipping=owner offers vessel; unknown=S&P/sale/spam/ambiguous), ton.r=tonnage as written, ton.min/max=MT integer range, ton.u=unit, ton.sc=size class, lp=loadPort, dp=dischargePort, lc=laycan as written, lcs/lce=ISO laycan start/end, cgo=cargo. Use null when absent.`;
 
-const THIRD_PASS_TEXT = 'Return a JSON array [[loadCountry,dischargeCountry],...] for each numbered port pair. "Unknown" if empty or unrecognizable. No markdown. Example: [["China","Singapore"],["Unknown","Netherlands"]]'
-
 function stripMarkdown(str) {
     return str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+}
+
+async function generateWithRetry(params, maxRetries = 4) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await client.models.generateContent(params);
+        } catch (err) {
+            const is429 = String(err?.message || err).includes('429') || String(err?.message || err).includes('RESOURCE_EXHAUSTED');
+            if (is429 && attempt < maxRetries) {
+                console.warn(`[classifier] Rate limited — retrying in 60s (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(r => setTimeout(r, 60000));
+            } else {
+                throw err;
+            }
+        }
+    }
 }
 
 function parse_first(result) {
@@ -37,14 +52,17 @@ export async function First_Pass_Classifier(emails) {
 
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 10 * emails.length,
-            temperature: 0,
-            system: FIRST_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
+        const msg = await generateWithRetry({
+            model: "gemini-2.5-flash",
+            contents: [{ role: 'user', parts: [{ text: userContent }] }],
+            config: {
+                temperature: 0.2,
+                maxOutputTokens: Math.max(256, 20 * emails.length),
+                thinkingConfig: { thinkingBudget: 0 },
+                systemInstruction: FIRST_PASS_TEXT,
+            },
         });
-        raw = msg.content[0].text.trim();
+        raw = msg.text.trim();
         return JSON.parse(stripMarkdown(raw));
     } catch (err) {
         console.error('[classifier] Pass 1 parse failure:', raw || err.message);
@@ -99,15 +117,17 @@ export async function Second_Pass_Classifier(emails) {
 
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-sonnet-4-6',
-            max_tokens: Math.min(8192, 1024 * emails.length),
-            temperature: 0,
-            output_config: { effort: 'low' },
-            system: SECOND_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
+        const msg = await generateWithRetry({
+            model: "gemini-2.5-flash",
+            contents: [{ role: 'user', parts: [{ text: userContent }] }],
+            config: {
+                temperature: 0.2,
+                maxOutputTokens: Math.min(16384, 1536 * emails.length),
+                thinkingConfig: { thinkingBudget: 512 },
+                systemInstruction: SECOND_PASS_TEXT,
+            },
         });
-        raw = msg.content[0].text.trim();
+        raw = msg.text.trim();
         const parsed = JSON.parse(stripMarkdown(raw));
         const items = Array.isArray(parsed) ? parsed : [parsed];
         return items.map(emailResult => {
@@ -119,40 +139,6 @@ export async function Second_Pass_Classifier(emails) {
     } catch (err) {
         console.error('[classifier] Pass 2 parse failure:', raw || err.message);
         return fallback;
-    }
-}
-
-function parse_third(result) {
-    if (!Array.isArray(result)) return [];
-    return result.map(entry => {
-        if (!Array.isArray(entry) || entry.length < 2) return ['Unknown', 'Unknown'];
-        return [
-            typeof entry[0] === 'string' && entry[0].trim() ? entry[0].trim() : 'Unknown',
-            typeof entry[1] === 'string' && entry[1].trim() ? entry[1].trim() : 'Unknown',
-        ];
-    });
-}
-
-export async function Third_Pass_Classifier(contents) {
-    let userContent = "";
-    for (let i = 0; i < contents.length; i++) {
-        userContent += `${i + 1}. Load: ${contents[i].classifications.loadPort}\n Discharge: ${contents[i].classifications.dischargePort}\n\n`;
-    }
-
-    let raw;
-    try {
-        const msg = await client.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 25 * contents.length,
-            temperature: 0,
-            system: THIRD_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
-        });
-        raw = msg.content[0].text.trim();
-        return JSON.parse(stripMarkdown(raw));
-    } catch (err) {
-        console.error('[classifier] Pass 3 parse failure:', raw || err.message);
-        return contents.map(() => 'UNKNOWN');
     }
 }
 
@@ -189,7 +175,7 @@ export async function classify(emails) {
     }
 
     let second_chunk = [];
-    let third_pass_queue = []
+    let db_queue = []
     for (let i = 0; i < second_pass_queue.length; i++) {
         second_chunk.push(second_pass_queue[i]);
 
@@ -211,19 +197,11 @@ export async function classify(emails) {
                 const date_sent = second_chunk[i].date
                 for (let j = 0; j < result[i].length; j++) {
                     if (result[i][j].type != "unknown") {
-                        // Sometimes models miss the k 
-                        if (result[i][j].tonnage.valueMin < 1000) {
-                            result[i][j].tonnage.valueMin * 1000;
-                        }
-                        if (result[i][j].tonnage.valueMax < 1000) {
-                            result[i][j].tonnage.valueMax * 1000;
-                        }
-                        // set lenient range
                         if (result[i][j].tonnage.valueMin === result[i][j].tonnage.valueMax) {
                             result[i][j].tonnage.valueMin = Math.round(result[i][j].tonnage.valueMin * 0.95);
                             result[i][j].tonnage.valueMax = Math.round(result[i][j].tonnage.valueMax * 1.05);
                         }
-                        third_pass_queue.push({
+                        db_queue.push({
                             message_id: message_id,
                             subject: subject,
                             body_preview: body_preview,
@@ -240,36 +218,6 @@ export async function classify(emails) {
             second_chunk = [];
 
         }
-    }
-
-
-    if (DEBUG_LOGS || LITE_DEBUG) {
-        console.log(`\n\n Classifying Ports from ${third_pass_queue.length} Entities\n\n`);
-    }
-
-    let thrid_chunk = []
-    let db_queue = []
-    for (let i = 0; i < third_pass_queue.length; i++) {
-        thrid_chunk.push(third_pass_queue[i]);
-        if ((i != 0 && i % CLASSIFY_THIRD_AMO === 0) || i == third_pass_queue.length - 1) {
-            if (DEBUG_LOGS) {
-                console.log(`[classifier] Third Pass: processing ${thrid_chunk.length} emails`);
-                thrid_chunk.forEach((email, i) => {
-                    console.log(`#${i + 1}: ${email.subject}`);
-                });
-            }
-            const result = parse_third(await Third_Pass_Classifier(thrid_chunk));
-            if (DEBUG_LOGS) {
-                console.log(result);
-            }
-            for (let j = 0; j < Math.min(result.length, thrid_chunk.length); j++) {
-                thrid_chunk[j].classifications.loadCountry = result[j][0]
-                thrid_chunk[j].classifications.dischargeCountry = result[j][1]
-                db_queue.push(thrid_chunk[j]);
-            }
-            thrid_chunk = [];
-        }
-
     }
 
     return db_queue
