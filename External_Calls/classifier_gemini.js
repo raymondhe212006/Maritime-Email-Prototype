@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import dotenv from 'dotenv';
-dotenv.config({ path: '../.env' });
+import 'dotenv/config';
 const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';

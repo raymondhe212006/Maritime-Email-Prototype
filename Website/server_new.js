@@ -39,10 +39,14 @@ const HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Maritime DB Viewer</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; scrollbar-color: #2a3044 #10141d; scrollbar-width: thin; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: #10141d; }
+  *::-webkit-scrollbar-thumb { background: #2a3044; border-radius: 8px; border: 2px solid #10141d; }
+  *::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
   body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
   header { padding: 20px 32px; border-bottom: 1px solid #1e2533; }
-  header h1 { font-size: 26px; font-weight: 600; letter-spacing: .02em; }
+  header h1 { font-size: 22px; font-weight: 600; letter-spacing: .02em; }
   .search-bar { padding: 10px 32px; border-bottom: 1px solid #1e2533; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 24px; }
   .search-field { display: flex; flex-direction: column; gap: 6px; }
   .search-field label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
@@ -66,17 +70,22 @@ const HTML = `<!DOCTYPE html>
   td { padding: 8px 8px; vertical-align: top; word-break: break-word; overflow-wrap: break-word; }
   tr:hover td { background: #151a27; }
   .row-sep td { border-bottom: 1px solid #1a1f2e; }
-  th:nth-child(1), td:nth-child(1) { width: 22%; padding-left: 20px; }
+  th:nth-child(1), td:nth-child(1) { width: 20%; padding-left: 20px; }
   th:nth-child(2), td:nth-child(2) { width: 13%; }
   th:nth-child(3), td:nth-child(3) { width: 11%; }
-  th:nth-child(4), td:nth-child(4) { width: 8%; }
-  th:nth-child(5), td:nth-child(5) { width: 8%; }
+  th:nth-child(4), td:nth-child(4) { width: 10%; }
+  th:nth-child(5), td:nth-child(5) { width: 9%; }
   th:nth-child(6), td:nth-child(6) { width: 11%; }
-  th:nth-child(7), td:nth-child(7) { width: 18%; }
+  th:nth-child(7), td:nth-child(7) { width: 17%; }
   th:nth-child(8), td:nth-child(8) { width: 9%; }
   .stack { display: flex; flex-direction: column; gap: 3px; }
   .stack .sub { font-size: 10px; color: #64748b; }
   .stack .country { font-size: 12px; color: #94a3b8; }
+  .tonnage-cell { align-items: flex-start; gap: 1px; }
+  .tonnage-cell .range-symbol { color: #64748b; font-size: 10px; line-height: 1.4; }
+  .tonnage-head { align-items: flex-start; gap: 1px; }
+  .tonnage-head .sort-btn { text-transform: inherit; }
+  .tonnage-head .range-symbol { color: #64748b; font-size: 10px; line-height: 1.4; }
   .null { color: #334155; font-style: italic; }
   .empty { text-align: center; padding: 60px; color: #334155; }
   .toggle-row { cursor: pointer; }
@@ -99,7 +108,8 @@ const HTML = `<!DOCTYPE html>
   <div class="search-field"><label>Discharge Country</label><input id="f-dischargecountry" placeholder="e.g. Brazil, India" oninput="renderAll()"></div>
   <div class="search-field"><label>Tonnage (MT)</label><input id="f-tonnage" placeholder="e.g. 50000, 70000" oninput="renderAll()"></div>
   <div class="search-field"><label>Laycan Date</label><input id="f-laycandate" type="date" oninput="renderAll()"></div>
-  <div class="search-field"><label>Company</label><input id="f-company" placeholder="e.g. @ex1.com, @ex2.org" oninput="renderAll()"></div>
+  <div class="search-field"><label>Company</label><input id="f-company" placeholder="e.g. @exampleemail1.com, @exampleemail2.org" oninput="renderAll()"></div>
+  <div class="search-field"><label>Keyword</label><input id="f-keyword" placeholder="e.g. iron ore , coal + aus → ore OR (coal AND aus)" oninput="renderAll()"></div>
 </div>
 <div class="columns">
   <div class="col vessels">
@@ -121,6 +131,10 @@ const HTML = `<!DOCTYPE html>
     return v == null ? '<span class="null">—</span>' : v.toLocaleString();
   }
 
+  function sizeClassText(v) {
+    return v == null ? v : String(v).split('/').join(' / ');
+  }
+
   function stack(top, bottom) {
     return \`<div class="stack"><div>\${top}</div><div class="sub">\${bottom}</div></div>\`;
   }
@@ -133,6 +147,10 @@ const HTML = `<!DOCTYPE html>
     return \`<div class="stack"><div>\${n(r.laycanStart)} to</div><div>\${n(r.laycanEnd)}</div><div class="sub">\${n(r.laycan)}</div></div>\`;
   }
 
+  function tonnageCell(r) {
+    return \`<div class="stack tonnage-cell"><div>\${fmt(r.tonnage_min)}</div><div class="range-symbol">to</div><div>\${fmt(r.tonnage_max)}</div></div>\`;
+  }
+
   function sentSplit(v) {
     if (!v) return ['<span class="null">—</span>', ''];
     const [datePart, timePartRaw] = v.split('T');
@@ -142,10 +160,10 @@ const HTML = `<!DOCTYPE html>
 
   const HEADERS = [
     'Ship / Subject', 'Load Port / Country', 'Discharge Port / Country',
-    'Tonnage Min', 'Tonnage Max', 'Laycan', 'Company', 'Sent (Time / Date)',
+    'Size Class', 'Tonnage (MT)', 'Laycan', 'Company', 'Sent (Time / Date)',
   ];
 
-  const SORT_KEYS = { 3: 'tonnage_min', 4: 'tonnage_max', 5: 'laycan', 7: 'date_sent' };
+  const SORT_KEYS = { 5: 'laycan', 7: 'date_sent' };
   const sortState = { key: null, dir: 'asc' };
 
   function setSort(key) {
@@ -173,12 +191,25 @@ const HTML = `<!DOCTYPE html>
     });
   }
 
-  function headerCell(label, idx) {
-    const key = SORT_KEYS[idx];
-    if (!key) return \`<th>\${label}</th>\`;
+  function sortButton(key, label) {
     const active = sortState.key === key;
     const arrow = active ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
-    return \`<th><button class="sort-btn" onclick="setSort('\${key}')">\${label} <span class="sort-arrow">\${arrow}</span></button></th>\`;
+    return \`<button class="sort-btn" onclick="setSort('\${key}')">\${label} <span class="sort-arrow">\${arrow}</span></button>\`;
+  }
+
+  function tonnageHeaderCell() {
+    return \`<th><div class="stack tonnage-head">
+      <div>\${sortButton('tonnage_min', 'Min')}</div>
+      <div class="range-symbol">to</div>
+      <div>\${sortButton('tonnage_max', 'Max')}</div>
+    </div></th>\`;
+  }
+
+  function headerCell(label, idx) {
+    if (idx === 4) return tonnageHeaderCell();
+    const key = SORT_KEYS[idx];
+    if (!key) return \`<th>\${label}</th>\`;
+    return \`<th>\${sortButton(key, label)}</th>\`;
   }
 
   const expanded = new Set();
@@ -195,8 +226,8 @@ const HTML = `<!DOCTYPE html>
       stack(n(r.item), n(r.subject)),
       portStack(n(r.load_port), n(r.load_country)),
       portStack(n(r.discharge_port), n(r.discharge_country)),
-      fmt(r.tonnage_min),
-      fmt(r.tonnage_max),
+      n(sizeClassText(r.size_class)),
+      tonnageCell(r),
       laycanCell(r),
       n(r.company),
       stack(sentTime, sentDate),
@@ -245,6 +276,19 @@ const HTML = `<!DOCTYPE html>
     return dateVal >= r.laycanStart && dateVal <= r.laycanEnd;
   }
 
+  function matchesKeyword(r, input) {
+    const trimmed = (input || '').trim().toLowerCase();
+    if (!trimmed) return true;
+    const haystack = ((r.subject || '') + ' ' + (r.body || '')).toLowerCase();
+    const orGroups = trimmed.split(',').map(g => g.trim()).filter(Boolean);
+    if (!orGroups.length) return true;
+    return orGroups.some(group => {
+      const andTerms = group.split('+').map(t => t.trim()).filter(Boolean);
+      if (!andTerms.length) return true;
+      return andTerms.every(t => haystack.includes(t));
+    });
+  }
+
   function matchesFilters(r) {
     return matchesAny(r.item, fieldVal('f-ship'))
       && matchesAny(r.load_port, fieldVal('f-loadport'))
@@ -253,7 +297,8 @@ const HTML = `<!DOCTYPE html>
       && matchesAny(r.discharge_country, fieldVal('f-dischargecountry'))
       && matchesTonnage(r, fieldVal('f-tonnage'))
       && matchesLaycanDate(r, fieldVal('f-laycandate'))
-      && matchesAny(r.company, fieldVal('f-company'));
+      && matchesAny(r.company, fieldVal('f-company'))
+      && matchesKeyword(r, fieldVal('f-keyword'));
   }
 
   let allRows = [];

@@ -1,6 +1,5 @@
 import fs from 'fs';
-import dotenv from 'dotenv';
-dotenv.config({ path: '../.env' });
+import 'dotenv/config';
 
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
@@ -36,7 +35,7 @@ export async function pollEmails(start, number, polltype) {
             const source = fs.readFileSync(fullPath);
             const email = await parseEmail({ uid: file }, source);
 
-            if (email.from.includes("bulk@argo-oriental.com") || email.from.includes("email@ibroker.world")) {
+            if (email.from.includes("bulk@argo-oriental.com")) {
                 if (DEBUG_LOGS || LITE_DEBUG) {
                     console.log("blacklist: " + email.subject);
                 }
@@ -81,7 +80,7 @@ export async function pollEmails(start, number, polltype) {
                 });
                 const email = await parseEmail(fullMessage, fullMessage.source);
 
-                if (email.from.includes("bulk@argo-oriental.com") || email.from.includes("email@ibroker.world")) {
+                if (email.from.includes("bulk@argo-oriental.com")) {
                     if (DEBUG_LOGS || LITE_DEBUG) {
                         console.log("blacklist: " + email.subject);
                     }
@@ -112,6 +111,22 @@ export async function pollEmails(start, number, polltype) {
     return emails
 }
 
+function stripHtml(html) {
+    return html
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|tr|table)>/gi, '\n')
+        .replace(/<\/td>/gi, ' ')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'");
+}
+
 export async function parseEmail(message, source) {
     const parsed = await simpleParser(source);
 
@@ -119,9 +134,14 @@ export async function parseEmail(message, source) {
     const from = parsed.from?.text || '';
     const date = parsed.date ? parsed.date.toISOString() : new Date().toISOString();
 
-    // Prefer plain text body. If missing, fall back to stripped HTML-ish text.
-    const bodyText = (parsed.text || '')
+    // Prefer plain text body. If missing/whitespace-only, fall back to stripped HTML.
+    const plainText = (parsed.text || '').trim();
+    const bodyText = (plainText || stripHtml(parsed.html || ''))
         .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+/g, ' ')
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 

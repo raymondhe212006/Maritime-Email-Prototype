@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import { resolveVesselClass, findSizeClasses } from '../Personalizations/sizeClasses.js';
-dotenv.config({ path: '../.env' });
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
