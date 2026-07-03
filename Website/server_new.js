@@ -42,15 +42,20 @@ const HTML = `<!DOCTYPE html>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
   header { padding: 20px 32px; border-bottom: 1px solid #1e2533; }
-  header h1 { font-size: 18px; font-weight: 600; letter-spacing: .02em; }
-  .columns { display: flex; height: calc(100vh - 61px); }
+  header h1 { font-size: 26px; font-weight: 600; letter-spacing: .02em; }
+  .search-bar { padding: 10px 32px; border-bottom: 1px solid #1e2533; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 24px; }
+  .search-field { display: flex; flex-direction: column; gap: 6px; }
+  .search-field label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+  .search-field input { background: #1a1f2e; border: 1px solid #2a3044; color: #e2e8f0; border-radius: 8px; padding: 6px 14px; font-size: 14px; width: 100%; outline: none; }
+  .search-field input:focus { border-color: #3b82f6; }
+  .columns { display: flex; height: calc(100vh - 61px - 250px); }
   .col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .col + .col { border-left: 1px solid #1e2533; }
   .col-head { padding: 16px 24px; border-bottom: 1px solid #1e2533; display: flex; align-items: center; justify-content: space-between; }
-  .col-head h2 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .col-head h2 { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
   .col.vessels .col-head h2 { color: #4ade80; }
   .col.cargos .col-head h2 { color: #60a5fa; }
-  .col-count { font-size: 12px; color: #64748b; }
+  .col-count { font-size: 16px; color: #ffffffff; }
   .col-body { overflow-y: auto; overflow-x: hidden; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
   th { position: sticky; top: 0; background: #1a1f2e; color: #64748b; font-weight: 500; text-align: left; padding: 8px 8px; border-bottom: 1px solid #2a3044; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; word-break: break-word; }
@@ -86,6 +91,16 @@ const HTML = `<!DOCTYPE html>
 <header>
   <h1>Maritime DB Viewer</h1>
 </header>
+<div class="search-bar">
+  <div class="search-field"><label>Ship Name</label><input id="f-ship" placeholder="e.g. Ocean Star, Pan Amber" oninput="renderAll()"></div>
+  <div class="search-field"><label>Load Port</label><input id="f-loadport" placeholder="e.g. Kakinada, Oran" oninput="renderAll()"></div>
+  <div class="search-field"><label>Load Country</label><input id="f-loadcountry" placeholder="e.g. China, Korea" oninput="renderAll()"></div>
+  <div class="search-field"><label>Discharge Port</label><input id="f-dischargeport" placeholder="e.g. Singapore, Houston" oninput="renderAll()"></div>
+  <div class="search-field"><label>Discharge Country</label><input id="f-dischargecountry" placeholder="e.g. Brazil, India" oninput="renderAll()"></div>
+  <div class="search-field"><label>Tonnage (MT)</label><input id="f-tonnage" placeholder="e.g. 50000, 70000" oninput="renderAll()"></div>
+  <div class="search-field"><label>Laycan Date</label><input id="f-laycandate" type="date" oninput="renderAll()"></div>
+  <div class="search-field"><label>Company</label><input id="f-company" placeholder="e.g. @ex1.com, @ex2.org" oninput="renderAll()"></div>
+</div>
 <div class="columns">
   <div class="col vessels">
     <div class="col-head"><h2>Vessels</h2><span class="col-count" id="vessels-count"></span></div>
@@ -202,10 +217,50 @@ const HTML = `<!DOCTYPE html>
     document.getElementById(id + '-empty').style.display = sorted.length ? 'none' : '';
   }
 
+  function fieldVal(id) {
+    return document.getElementById(id).value;
+  }
+
+  function terms(input) {
+    return input.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  }
+
+  function matchesAny(value, input) {
+    const ts = terms(input);
+    if (!ts.length) return true;
+    const v = (value || '').toLowerCase();
+    return ts.some(t => v.includes(t));
+  }
+
+  function matchesTonnage(r, input) {
+    const ts = terms(input).map(Number).filter(v => !isNaN(v));
+    if (!ts.length) return true;
+    if (r.tonnage_min == null || r.tonnage_max == null) return false;
+    return ts.some(v => v >= r.tonnage_min && v <= r.tonnage_max);
+  }
+
+  function matchesLaycanDate(r, dateVal) {
+    if (!dateVal) return true;
+    if (!r.laycanStart || !r.laycanEnd) return false;
+    return dateVal >= r.laycanStart && dateVal <= r.laycanEnd;
+  }
+
+  function matchesFilters(r) {
+    return matchesAny(r.item, fieldVal('f-ship'))
+      && matchesAny(r.load_port, fieldVal('f-loadport'))
+      && matchesAny(r.load_country, fieldVal('f-loadcountry'))
+      && matchesAny(r.discharge_port, fieldVal('f-dischargeport'))
+      && matchesAny(r.discharge_country, fieldVal('f-dischargecountry'))
+      && matchesTonnage(r, fieldVal('f-tonnage'))
+      && matchesLaycanDate(r, fieldVal('f-laycandate'))
+      && matchesAny(r.company, fieldVal('f-company'));
+  }
+
   let allRows = [];
   function renderAll() {
-    renderCol('vessels', allRows.filter(r => r.type === 'vessel'));
-    renderCol('cargos', allRows.filter(r => r.type === 'cargo'));
+    const filtered = allRows.filter(matchesFilters);
+    renderCol('vessels', filtered.filter(r => r.type === 'vessel'));
+    renderCol('cargos', filtered.filter(r => r.type === 'cargo'));
   }
 
   async function load() {
