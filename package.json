@@ -8,7 +8,7 @@
         "dev": "node index.js",
         "sandbox": "node sandbox.js",
         "test": "node --test test/*.test.js",
-        "website": "node Website/server.js"
+        "website": "node Website/server_new.js"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.60.0",

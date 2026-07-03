@@ -6,10 +6,20 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEmail } from '../Email_Polling/poll.js';
 import { classify } from '../External_Calls/classifier.js';
-import { saveClassifications, getShipmentsBySubject, deleteShipmentsBySubject, check_duplicate, purgeEmails } from '../Database/db.js';
+import { db, saveClassifications, check_duplicate, purgeEmails } from '../Database/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMAILS = path.join(__dirname, '..', 'Emails');
+
+const selectBySubject = db.prepare('SELECT * FROM shipments WHERE subject = ?');
+function getShipmentsBySubject(subject) {
+    return selectBySubject.all(subject);
+}
+
+const deleteBySubject = db.prepare('DELETE FROM shipments WHERE subject = ?');
+function deleteShipmentsBySubject(subject) {
+    deleteBySubject.run(subject);
+}
 
 function readEml(name) {
     return fs.readFileSync(path.join(EMAILS, name));

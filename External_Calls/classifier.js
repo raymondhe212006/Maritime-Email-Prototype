@@ -11,11 +11,11 @@ const CLASSIFY_THIRD_AMO = Number(process.env.CLASSIFY_THIRD_AMO || 50);
 
 const FIRST_PASS_TEXT = 'Classify each numbered email as "MARITIME" (vessels, cargo) or "UNKNOWN". Return ONLY a JSON array in input order. No markdown. Example: ["MARITIME","UNKNOWN"]'
 
-const SECOND_PASS_TEXT = `Maritime shipping classifier. Return ONLY a JSON array, one element per email in input order. Each element is an array of shipment objects. No markdown, no extra nesting.
+const SECOND_PASS_TEXT = `Maritime classifier. Return ONLY a JSON array (no markdown): one elem per email, each elem an array of shipment objs.
 
-Example for 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","cgo":"Coal"}],[{"t":"shipping","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"cgo":null}]]
+Ex. 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","itm":"Coal"}],[{"t":"vessel","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"itm":"MV Ocean Star"}]]
 
-Fields: t (cargo=charterer needs vessel; shipping=owner offers vessel; unknown=S&P/sale/spam/ambiguous), ton.r=tonnage as written, ton.min/max=MT integer range, ton.u=unit, ton.sc=size class, lp=loadPort, dp=dischargePort, lc=laycan as written, lcs/lce=ISO laycan start/end, cgo=cargo. Use null when absent.`;
+t: cargo=needs vessel, vessel=offers vessel, unknown=S&P/sale/spam/ambiguous. ton: r=raw text, min/max=MT int range, u=unit, sc=size class. lp/dp=load/discharge port. lc=laycan raw, lcs/lce=ISO start/end. itm: cargo type(cargo)/vessel name(vessel)/null(unknown). Null if absent elsewhere.`;
 
 const THIRD_PASS_TEXT = 'Return a JSON array [[loadCountry,dischargeCountry],...] for each numbered port pair. "Unknown" if empty or unrecognizable. No markdown. Example: [["China","Singapore"],["Unknown","Netherlands"]]'
 
@@ -53,7 +53,7 @@ export async function First_Pass_Classifier(emails) {
 }
 
 function normalizeSecondPassResult(parsed) {
-    const VALID_TYPES = ['cargo', 'shipping', 'unknown'];
+    const VALID_TYPES = ['cargo', 'vessel', 'unknown'];
     const type = VALID_TYPES.includes(parsed.t) ? parsed.t : 'unknown';
     return {
         type,
@@ -69,7 +69,7 @@ function normalizeSecondPassResult(parsed) {
         laycan: parsed.lc ?? null,
         laycanStart: parsed.lcs ?? null,
         laycanEnd: parsed.lce ?? null,
-        cargo: parsed.cgo ?? null,
+        item: parsed.itm ?? null,
     };
 }
 
@@ -94,7 +94,7 @@ export async function Second_Pass_Classifier(emails) {
         laycan: null,
         laycanStart: null,
         laycanEnd: null,
-        cargo: null,
+        item: null,
     }]);
 
     let raw;
@@ -206,7 +206,7 @@ export async function classify(emails) {
             for (let i = 0; i < Math.min(result.length, second_chunk.length); i++) {
                 const message_id = second_chunk[i].messageId;
                 const subject = second_chunk[i].subject;
-                const body_preview = second_chunk[i].bodyText.slice(0, 300);
+                const body = second_chunk[i].bodyText;
                 const company = '@' + second_chunk[i].from.split('@')[1];
                 const date_sent = second_chunk[i].date
                 for (let j = 0; j < result[i].length; j++) {
@@ -214,12 +214,20 @@ export async function classify(emails) {
                         // TODO: size_class-only entries (e.g. "Panamax") have no numeric tonnage —
                         // in future, manually map known size classes to MT ranges here
                         // Sometimes models miss the K suffix (10K → should be 10000)
-                        if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMin < 1000) {
+
+                        if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMax === null) {
+                            result[i][j].tonnage.valueMax = result[i][j].tonnage.valueMin;
+                        }
+                        if (result[i][j].tonnage.valueMin === null && result[i][j].tonnage.valueMax != null) {
+                            result[i][j].tonnage.valueMin = result[i][j].tonnage.valueMax;
+                        }
+                        if (result[i][j].tonnage.valueMin != result[i][j].tonnage.valueMin && tMin < 1000) {
                             result[i][j].tonnage.valueMin *= 1000;
                         }
                         if (result[i][j].tonnage.valueMax != null && result[i][j].tonnage.valueMax < 1000) {
                             result[i][j].tonnage.valueMax *= 1000;
                         }
+
                         // set lenient range when a single point value was given
                         const tMin = result[i][j].tonnage.valueMin;
                         const tMax = result[i][j].tonnage.valueMax;
@@ -230,7 +238,7 @@ export async function classify(emails) {
                         third_pass_queue.push({
                             message_id: message_id,
                             subject: subject,
-                            body_preview: body_preview,
+                            body: body,
                             company: company,
                             time_sent: date_sent,
                             classifications: result[i][j],
