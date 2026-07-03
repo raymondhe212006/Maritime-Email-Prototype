@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
+import { resolveVesselClass, findSizeClasses } from '../Personalizations/sizeClasses.js';
 dotenv.config({ path: '../.env' });
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
@@ -122,6 +123,71 @@ export async function Second_Pass_Classifier(emails) {
     }
 }
 
+
+export function correct(result) {
+    // Normalize Name and calculate standard min/max if needed
+    const sizeClass = result.tonnage.sizeClass;
+    let abs_min = 300000;
+    let abs_max = -1;
+    if (sizeClass) {
+        let classes = "";
+        let start = 0;
+        for (let k = 0; k < sizeClass.length; k++) {
+            if (sizeClass[k] === "/" || sizeClass[k] === "–" || sizeClass[k] === "-" || k == sizeClass.length - 1) {
+                const vessel_class = resolveVesselClass(sizeClass.slice(start, k + 1 === sizeClass.length ? k + 1 : k));
+                if (vessel_class) {
+                    classes += vessel_class.name;
+                    if (k != sizeClass.length - 1) {
+                        classes += "/";
+                    }
+                    abs_min = Math.min(abs_min, vessel_class.min_dwt);
+                    abs_max = Math.max(abs_max, vessel_class.max_dwt);
+                    start = k + 1;
+                }
+            }
+        }
+        if (classes != "") {
+            result.tonnage.sizeClass = classes;
+        }
+    }
+
+    // If an int val is present, use it to fill in missing tonnage
+    if (result.tonnage.valueMin != null && result.tonnage.valueMax === null) {
+        result.tonnage.valueMax = result.tonnage.valueMin;
+    }
+    if (result.tonnage.valueMin === null && result.tonnage.valueMax != null) {
+        result.tonnage.valueMin = result.tonnage.valueMax;
+    }
+
+    // Sometimes models miss the K suffix (10K → should be 10000)
+    if (result.tonnage.valueMin != null && result.tonnage.valueMin < 1000) {
+        result.tonnage.valueMin *= 1000;
+    }
+    if (result.tonnage.valueMax != null && result.tonnage.valueMax < 1000) {
+        result.tonnage.valueMax *= 1000;
+    }
+
+    // set lenient range when a single point value was given
+    if (result.tonnage.valueMin != null && result.tonnage.valueMax != null && result.tonnage.valueMin === result.tonnage.valueMax) {
+        result.tonnage.valueMin = Math.round(result.tonnage.valueMin * 0.95);
+        result.tonnage.valueMax = Math.round(result.tonnage.valueMax * 1.05);
+    }
+
+    if (result.tonnage.valueMin === null && result.tonnage.valueMax === null) {
+        if (abs_min === 300000 && abs_max === -1) {
+            result.tonnage.valueMin = 0;
+            result.tonnage.valueMax = 300000;
+        } else {
+            result.tonnage.valueMin = abs_min;
+            result.tonnage.valueMax = abs_max;
+        }
+    }
+
+    if (!result.tonnage.sizeClass) {
+        result.tonnage.sizeClass = findSizeClasses(result.tonnage.valueMin, result.tonnage.valueMax);
+    }
+}
+
 function parse_third(result) {
     if (!Array.isArray(result)) return [];
     return result.map(entry => {
@@ -209,32 +275,11 @@ export async function classify(emails) {
                 const body = second_chunk[i].bodyText;
                 const company = '@' + second_chunk[i].from.split('@')[1];
                 const date_sent = second_chunk[i].date
+
                 for (let j = 0; j < result[i].length; j++) {
                     if (result[i][j].type != "unknown") {
-                        // TODO: size_class-only entries (e.g. "Panamax") have no numeric tonnage —
-                        // in future, manually map known size classes to MT ranges here
-                        // Sometimes models miss the K suffix (10K → should be 10000)
+                        correct(result[i][j]);
 
-                        if (result[i][j].tonnage.valueMin != null && result[i][j].tonnage.valueMax === null) {
-                            result[i][j].tonnage.valueMax = result[i][j].tonnage.valueMin;
-                        }
-                        if (result[i][j].tonnage.valueMin === null && result[i][j].tonnage.valueMax != null) {
-                            result[i][j].tonnage.valueMin = result[i][j].tonnage.valueMax;
-                        }
-                        if (result[i][j].tonnage.valueMin != result[i][j].tonnage.valueMin && tMin < 1000) {
-                            result[i][j].tonnage.valueMin *= 1000;
-                        }
-                        if (result[i][j].tonnage.valueMax != null && result[i][j].tonnage.valueMax < 1000) {
-                            result[i][j].tonnage.valueMax *= 1000;
-                        }
-
-                        // set lenient range when a single point value was given
-                        const tMin = result[i][j].tonnage.valueMin;
-                        const tMax = result[i][j].tonnage.valueMax;
-                        if (tMin != null && tMax != null && tMin === tMax) {
-                            result[i][j].tonnage.valueMin = Math.round(tMin * 0.95);
-                            result[i][j].tonnage.valueMax = Math.round(tMax * 1.05);
-                        }
                         third_pass_queue.push({
                             message_id: message_id,
                             subject: subject,

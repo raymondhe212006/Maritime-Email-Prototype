@@ -1,0 +1,5 @@
+`Maritime shipping classifier. Return ONLY a JSON array, one element per email in input order. Each element is an array of shipment objects. No markdown, no extra nesting.
+
+Example for 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","cgo":"Coal"}],[{"t":"shipping","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"cgo":null}]]
+
+Fields: t (cargo=charterer needs vessel; shipping=owner offers vessel; unknown=S&P/sale/spam/ambiguous), ton.r=tonnage as written, ton.min/max=MT integer range, ton.u=unit, ton.sc=size class, lp=loadPort, dp=dischargePort, lc=laycan as written, lcs/lce=ISO laycan start/end, cgo=cargo. Use null when absent.`
