@@ -105,3 +105,8 @@ export function correctEqualTonnageRanges() {
 
     console.log(`[db] corrected ${result.changes} tonnage rows`);
 }
+
+
+export function searchTonnage(tonnages) {
+
+}

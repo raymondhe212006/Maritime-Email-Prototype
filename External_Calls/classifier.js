@@ -273,7 +273,10 @@ export async function classify(emails) {
                 const message_id = second_chunk[i].messageId;
                 const subject = second_chunk[i].subject;
                 const body = second_chunk[i].bodyText;
-                const company = '@' + second_chunk[i].from.split('@')[1];
+                let company = '@' + second_chunk[i].from.split('@')[1];
+                if (company[company.length - 1] === ">") {
+                    company = company.slice(0, -1);
+                }
                 const date_sent = second_chunk[i].date
 
                 for (let j = 0; j < result[i].length; j++) {

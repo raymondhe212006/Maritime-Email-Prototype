@@ -1,7 +1,15 @@
 import 'dotenv/config';
 import { pollEmails } from './Email_Polling/poll.js';
-import { saveClassifications } from './Database/db.js';
+import { saveClassifications, purgeEmails } from './Database/db.js';
 
+
+const POLL_BATCH_SIZE = Number(process.env.POLL_BATCH_SIZE || 50);
+const POLL_TYPE = Number(process.env.POLL_TYPE || 0);
+const POLL_0_DEBUG_START = Number(process.env.POLL_0_DEBUG_START || 0);
+const POLL_TOTAL_AMO = Number(process.env.POLL_TOTAL_AMO || 100);
+const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
+const RUN_INTERVAL = Number(process.env.RUN_INTERVAL || 30);
+const PURGE_INTERVAL = Number(process.env.PURGE_INTERVAL || 6);
 const KEY_TYPE = Number(process.env.KEY_TYPE || 0);
 let classify;
 if (KEY_TYPE === 0) {
@@ -15,11 +23,6 @@ if (KEY_TYPE === 0) {
     process.exit(1);
 }
 
-const POLL_BATCH_SIZE = Number(process.env.POLL_BATCH_SIZE || 50);
-const POLL_TYPE = Number(process.env.POLL_TYPE || 0);
-const POLL_0_DEBUG_START = Number(process.env.POLL_0_DEBUG_START || 0);
-const POLL_TOTAL_AMO = Number(process.env.POLL_TOTAL_AMO || 100);
-const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 
 if (DEBUG_LOGS) {
     console.log('[main] Starting email poll');
@@ -99,18 +102,42 @@ else if (POLL_TYPE === 1) {
         }
     }
 
+    // Active window is Beijing workday 8am-5pm, expressed in server-local time
+    // (12h behind Beijing) as 8pm-5am on nights starting Sun/Mon/Tue/Wed/Thu.
     const isWithinPollingHours = () => {
-        const hour = new Date().getHours();
-        return hour >= 20 || hour < 6;
+        const now = new Date();
+        const hour = now.getHours();
+        const day = now.getDay(); // 0=Sun ... 6=Sat
+        if (hour >= 20) return day >= 0 && day <= 4; // Sun-Thu evenings
+        if (hour < 5) return day >= 1 && day <= 5; // Mon-Fri early mornings (prev night was Sun-Thu)
+        return false;
+    };
+
+    // ms until the next window opens (next 8pm on a Sun/Mon/Tue/Wed/Thu)
+    const msUntilNextWindow = () => {
+        const now = new Date();
+        for (let addDays = 0; addDays <= 7; addDays++) {
+            const candidate = new Date(now);
+            candidate.setDate(now.getDate() + addDays);
+            candidate.setHours(20, 0, 0, 0);
+            if (candidate <= now) continue;
+            if (candidate.getDay() <= 4) return candidate.getTime() - now.getTime();
+        }
+        return 4 * 60 * 60 * 1000; // unreachable
     };
 
     const scheduleNext = () => {
-        const delay = isWithinPollingHours() ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
-        setTimeout(async () => { await run(); scheduleNext(); }, delay);
+        if (isWithinPollingHours()) {
+            setTimeout(async () => { await run(); scheduleNext(); }, RUN_INTERVAL * 60 * 1000);
+        } else {
+            setTimeout(scheduleNext, msUntilNextWindow());
+        }
     };
 
     run();
     scheduleNext();
+    purgeEmails();
+    setInterval(purgeEmails, PURGE_INTERVAL * 60 * 60 * 1000);
 
 }
 else {
