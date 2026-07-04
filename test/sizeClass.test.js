@@ -369,11 +369,11 @@ describe('correct — findSizeClasses reverse lookup (derives a sizeClass from a
 
 describe('correct — laycan date-fill from spot/prompt/ppt patterns', () => {
     const dateSent = '2026-07-03T00:00:00.000Z';
-    const expectedStart = new Date(dateSent).toISOString();
+    const expectedStart = new Date(dateSent).toISOString().slice(0, 10);
     const expectedEnd = (() => {
         const d = new Date(dateSent);
         d.setDate(d.getDate() + 3);
-        return d.toISOString();
+        return d.toISOString().slice(0, 10);
     })();
 
     test('lowercase "spot" fills laycanStart/laycanEnd from date_sent', () => {
@@ -440,5 +440,58 @@ describe('correct — laycan date-fill from spot/prompt/ppt patterns', () => {
         correct(c, dateSent);
         assert.equal(c.laycanStart, '2026-01-01');
         assert.equal(c.laycanEnd, '2026-01-10');
+    });
+});
+
+describe('correct — laycanEnd fallback (+7 days) when only laycanStart is known', () => {
+    test('laycanStart set directly (not via a spot/prompt/ppt match) fills laycanEnd as start + 7 days', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = '1-10 Jul';
+        c.laycanStart = '2026-06-01';
+        correct(c);
+        assert.equal(c.laycanStart, '2026-06-01');
+        assert.equal(c.laycanEnd, '2026-06-08');
+    });
+
+    test('laycan is entirely null but laycanStart is set — fallback still fires', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycanStart = '2026-06-01';
+        correct(c);
+        assert.equal(c.laycanEnd, '2026-06-08');
+    });
+
+    test('both laycanStart and laycanEnd null — fallback does not fire, laycanEnd stays null', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        correct(c);
+        assert.equal(c.laycanStart, null);
+        assert.equal(c.laycanEnd, null);
+    });
+
+    test('laycanEnd already set is left untouched, even though laycanStart is also set', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycanStart = '2026-06-01';
+        c.laycanEnd = '2026-06-03';
+        correct(c);
+        assert.equal(c.laycanEnd, '2026-06-03');
+    });
+
+    test('crosses a month boundary correctly (Jan 28 + 7 -> Feb 4)', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycanStart = '2026-01-28';
+        correct(c);
+        assert.equal(c.laycanEnd, '2026-02-04');
+    });
+
+    test('a spot/prompt/ppt match takes precedence over the +7-day fallback: laycanEnd comes from date_sent+3, not laycanStart+7', () => {
+        const dateSent = '2026-07-03T00:00:00.000Z';
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'spot';
+        c.laycanStart = '2026-06-01';
+        correct(c, dateSent);
+        // laycanStart is already set, so the spot-match block leaves it alone,
+        // but it still fills laycanEnd from date_sent+3 — so the +7-from-laycanStart
+        // fallback below never runs (laycanEnd is no longer null by that point).
+        assert.equal(c.laycanStart, '2026-06-01');
+        assert.equal(c.laycanEnd, '2026-07-06');
     });
 });

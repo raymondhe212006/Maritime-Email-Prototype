@@ -1,4 +1,4 @@
-export const laycan_patterns = ["spot", "prompt", "ppt"];
+export const laycan_patterns = ["spot", "prompt", "ppt", "ready"];
 
 export const VESSEL_CLASS_ALIASES = {
     handysize: {

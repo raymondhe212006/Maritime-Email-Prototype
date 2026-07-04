@@ -57,58 +57,73 @@ export async function pollEmails(start, number, polltype) {
     else if (polltype === 1) {
         const client = createImapClient();
         await client.connect();
-        let lock = await client.getMailboxLock('INBOX');
         console.log("Inbox connected")
 
         try {
-            // Get recent/unread emails
-            const uids = await client.search();
-            console.log("Recieved Emails")
+            const lock = await client.getMailboxLock('INBOX');
 
-            if (uids.length === 0) {
-                console.log('[imap] no emails found');
-                return emails;
-            }
+            try {
+                // Get recent/unread emails
+                const uids = await client.search();
+                console.log("Recieved Emails")
 
-            const count = Math.min(number, uids.length);
-            for (let i = 0; i < count; i++) {
-                const latestUid = uids[uids.length - i - 1];
-                const fullMessage = await client.fetchOne(latestUid, {
+                if (uids.length === 0) {
+                    console.log('[imap] no emails found');
+                    return emails;
+                }
+
+                const count = Math.min(number, uids.length);
+                const targetSeqs = uids.slice(-count).reverse();
+
+                const messagesBySeq = new Map();
+                for await (const message of client.fetch(targetSeqs, {
                     uid: true,
                     envelope: true,
                     source: true,
-                });
-                const email = await parseEmail(fullMessage, fullMessage.source);
+                })) {
+                    messagesBySeq.set(message.seq, message);
+                }
 
-                if (email.from.includes("bulk@argo-oriental.com")) {
-                    if (DEBUG_LOGS || LITE_DEBUG) {
-                        console.log("blacklist: " + email.subject);
+                for (let i = 0; i < targetSeqs.length; i++) {
+                    const fullMessage = messagesBySeq.get(targetSeqs[i]);
+                    if (!fullMessage) continue;
+                    const email = await parseEmail(fullMessage, fullMessage.source);
+
+                    if (email.from.includes("bulk@argo-oriental.com")) {
+                        if (DEBUG_LOGS || LITE_DEBUG) {
+                            console.log("blacklist: " + email.subject);
+                        }
+                        continue;
                     }
-                    continue;
-                }
 
-                if (check_duplicate(email.messageId)) {
-                    if (DEBUG_LOGS || LITE_DEBUG) {
-                        console.log("duplicate: " + email.subject);
+                    if (check_duplicate(email.messageId)) {
+                        if (DEBUG_LOGS || LITE_DEBUG) {
+                            console.log("duplicate: " + email.subject);
+                        }
+                        break;
                     }
-                    break;
-                }
 
-                if (DEBUG_LOGS) {
-                    console.log(`[imap] #${i + 1} Email ${email.subject}`);
+                    if (DEBUG_LOGS) {
+                        console.log(`[imap] #${i + 1} Email ${email.subject}`);
+                    }
+                    emails.push(email);
                 }
-                emails.push(email);
+            } finally {
+                lock.release();
             }
         } finally {
-            lock.release();
-            await client.logout();
+            try {
+                await client.logout();
+            } catch (err) {
+                console.error('[imap] logout failed:', err.message);
+            }
         }
     }
 
     if (DEBUG_LOGS || LITE_DEBUG) {
         console.log(`\n\nTotal Emails to classify: ${emails.length}\n\n`);
     }
-    return emails
+    return emails;
 }
 
 function stripHtml(html) {

@@ -15,7 +15,7 @@ const SECOND_PASS_TEXT = `Maritime classifier. Return ONLY a JSON array (no mark
 
 Ex. 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","itm":"Coal"}],[{"t":"vessel","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"itm":"MV Ocean Star"}]]
 
-t: cargo=needs vessel, vessel=offers vessel, unknown=S&P/sale/spam/ambiguous. ton: r=raw text, min/max=MT int range, u=unit, sc=size class. lp/dp=load/discharge port. lc=laycan raw, lcs/lce=ISO start/end. itm: cargo type(cargo)/vessel name(vessel)/null(unknown). Null if absent elsewhere.`;
+t: cargo=needs vessel, vessel=offers vessel, unknown=S&P/sale/spam/ambiguous. ton: r=raw text, min/max=MT int range, u=unit, sc=size class. lp/dp=load/discharge port. lc=laycan raw, lcs/lce=ISO start/end (for lc="D-D Month" both days share that month). itm: cargo type(cargo)/vessel name(vessel)/null(unknown). Null if absent elsewhere.`;
 
 const THIRD_PASS_TEXT = 'Return a JSON array [[loadCountry,dischargeCountry],...] for each numbered port pair. "Unknown" if empty or unrecognizable. No markdown. Example: [["China","Singapore"],["Unknown","Netherlands"]]'
 
@@ -189,18 +189,25 @@ export function correct(result, date_sent) {
     for (const pattern of laycan_patterns) {
         if (result.laycan != null && result.laycan.toLowerCase().includes(pattern)) {
             const start_date = new Date(date_sent);
-            const end_date = new Date(date_sent)
+            const end_date = new Date(date_sent);
             end_date.setDate(end_date.getDate() + 3);
 
-            if (result.laycanStart == null) {
-                result.laycanStart = start_date.toISOString();
+            if (result.laycanStart === null) {
+                result.laycanStart = start_date.toISOString().slice(0, 10);
             }
-            if (result.laycanEnd == null) {
-                result.laycanEnd = end_date.toISOString();
+            if (result.laycanEnd === null) {
+                result.laycanEnd = end_date.toISOString().slice(0, 10);
             }
             break;
         }
     }
+
+    if (result.laycanEnd === null && result.laycanStart != null) {
+        const end_date = new Date(result.laycanStart);
+        end_date.setDate(end_date.getDate() + 7);
+        result.laycanEnd = end_date.toISOString().slice(0, 10);
+    }
+
 }
 
 function parse_third(result) {
@@ -289,7 +296,6 @@ export async function classify(emails) {
                 const message_id = second_chunk[i].messageId;
                 const subject = second_chunk[i].subject;
                 const body = second_chunk[i].bodyText;
-                console.log(body);
                 let company = '@' + second_chunk[i].from.split('@')[1];
                 if (company[company.length - 1] === ">") {
                     company = company.slice(0, -1);

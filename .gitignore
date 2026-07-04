@@ -3,3 +3,5 @@ node_modules/
 .claude/
 Database/maritime.db
 Emails/*.eml
+.DS_Store
+Legacy_Content/maritime_gen1.db
