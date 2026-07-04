@@ -366,3 +366,79 @@ describe('correct — findSizeClasses reverse lookup (derives a sizeClass from a
         assert.equal(c.tonnage.valueMax, 53000);
     });
 });
+
+describe('correct — laycan date-fill from spot/prompt/ppt patterns', () => {
+    const dateSent = '2026-07-03T00:00:00.000Z';
+    const expectedStart = new Date(dateSent).toISOString();
+    const expectedEnd = (() => {
+        const d = new Date(dateSent);
+        d.setDate(d.getDate() + 3);
+        return d.toISOString();
+    })();
+
+    test('lowercase "spot" fills laycanStart/laycanEnd from date_sent', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'spot';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, expectedStart);
+        assert.equal(c.laycanEnd, expectedEnd);
+    });
+
+    test('lowercase "ppt" fills laycanStart/laycanEnd from date_sent', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'ppt';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, expectedStart);
+        assert.equal(c.laycanEnd, expectedEnd);
+    });
+
+    test('lowercase "prompt" fills laycanStart/laycanEnd from date_sent', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'prompt';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, expectedStart);
+        assert.equal(c.laycanEnd, expectedEnd);
+    });
+
+    test('"SPOT" (all caps) still fills dates — match is case-insensitive', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'SPOT';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, expectedStart);
+        assert.equal(c.laycanEnd, expectedEnd);
+    });
+
+    test('"PPT" (all caps) still fills dates — match is case-insensitive', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'PPT';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, expectedStart);
+        assert.equal(c.laycanEnd, expectedEnd);
+    });
+
+    test('"Prompt" (capitalized) still fills dates — match is case-insensitive', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'Prompt';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, expectedStart);
+        assert.equal(c.laycanEnd, expectedEnd);
+    });
+
+    test('"Spot/Prompt" (real-world combined form) fills dates from the first matching pattern', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'Spot/Prompt';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, expectedStart);
+        assert.equal(c.laycanEnd, expectedEnd);
+    });
+
+    test('pre-existing laycanStart/laycanEnd are preserved, not overwritten, even when a pattern matches', () => {
+        const c = classification({ sizeClass: 'Panamax' });
+        c.laycan = 'spot';
+        c.laycanStart = '2026-01-01';
+        c.laycanEnd = '2026-01-10';
+        correct(c, dateSent);
+        assert.equal(c.laycanStart, '2026-01-01');
+        assert.equal(c.laycanEnd, '2026-01-10');
+    });
+});

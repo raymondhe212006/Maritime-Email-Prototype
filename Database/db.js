@@ -10,7 +10,7 @@ db.exec(`
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         message_id  TEXT,
         subject     TEXT,
-        body TEXT,
+        body        TEXT,
         type        TEXT,
         company     TEXT,
         date_sent   TEXT,
@@ -104,9 +104,4 @@ export function correctEqualTonnageRanges() {
     const result = correctEqualTonnageStmt.run();
 
     console.log(`[db] corrected ${result.changes} tonnage rows`);
-}
-
-
-export function searchTonnage(tonnages) {
-
 }

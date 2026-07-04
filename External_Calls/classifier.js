@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
-import { resolveVesselClass, findSizeClasses } from '../Personalizations/sizeClasses.js';
+import { resolveVesselClass, findSizeClasses, laycan_patterns } from '../Personalizations/patterns.js';
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
@@ -123,7 +123,7 @@ export async function Second_Pass_Classifier(emails) {
 }
 
 
-export function correct(result) {
+export function correct(result, date_sent) {
     // Normalize Name and calculate standard min/max if needed
     const sizeClass = result.tonnage.sizeClass;
     let abs_min = 300000;
@@ -185,6 +185,22 @@ export function correct(result) {
     if (!result.tonnage.sizeClass) {
         result.tonnage.sizeClass = findSizeClasses(result.tonnage.valueMin, result.tonnage.valueMax);
     }
+
+    for (const pattern of laycan_patterns) {
+        if (result.laycan != null && result.laycan.toLowerCase().includes(pattern)) {
+            const start_date = new Date(date_sent);
+            const end_date = new Date(date_sent)
+            end_date.setDate(end_date.getDate() + 3);
+
+            if (result.laycanStart == null) {
+                result.laycanStart = start_date.toISOString();
+            }
+            if (result.laycanEnd == null) {
+                result.laycanEnd = end_date.toISOString();
+            }
+            break;
+        }
+    }
 }
 
 function parse_third(result) {
@@ -245,6 +261,7 @@ export async function classify(emails) {
             first_chunk = [];
         }
     }
+
     if (DEBUG_PASS1 === true) {
         return null;
     }
@@ -272,6 +289,7 @@ export async function classify(emails) {
                 const message_id = second_chunk[i].messageId;
                 const subject = second_chunk[i].subject;
                 const body = second_chunk[i].bodyText;
+                console.log(body);
                 let company = '@' + second_chunk[i].from.split('@')[1];
                 if (company[company.length - 1] === ">") {
                     company = company.slice(0, -1);
@@ -280,7 +298,7 @@ export async function classify(emails) {
 
                 for (let j = 0; j < result[i].length; j++) {
                     if (result[i][j].type != "unknown") {
-                        correct(result[i][j]);
+                        correct(result[i][j], date_sent);
 
                         third_pass_queue.push({
                             message_id: message_id,
