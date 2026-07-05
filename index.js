@@ -133,9 +133,10 @@ else if (POLL_TYPE === 1 || POLL_TYPE === 2) {
             setTimeout(async () => { await run(); scheduleNext(); }, RUN_INTERVAL * 60 * 1000);
 
         } else {
-            const nextPoll = new Date(Date.now() + msUntilNextWindow());
+            const untilWindow = msUntilNextWindow();
+            const nextPoll = new Date(Date.now() + untilWindow + RUN_INTERVAL * 60 * 1000);
             console.log(`[scheduler] not within polling hours, Next poll: ${nextPoll.toString()}`);
-            setTimeout(scheduleNext, msUntilNextWindow());
+            setTimeout(scheduleNext, untilWindow);
         }
     };
 

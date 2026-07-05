@@ -61,6 +61,23 @@ npm test
 
 Tests live in `test/*.test.js` and use Node's built-in `node:test` module. Do not mark work complete if any test is failing.
 
+## Deployment (Cloudflare Tunnel)
+
+To make the local dashboard (`http://localhost:3000`, started via `npm run website`) reachable by people in China without owning a domain, use a Cloudflare **quick tunnel**:
+
+```bash
+brew install cloudflared      # macOS; see cloudflare docs for other platforms
+cloudflared tunnel --url http://localhost:3000
+```
+
+This prints a public `https://<random-name>.trycloudflare.com` URL proxied through Cloudflare's edge network. Notes:
+
+- The URL is randomly generated and changes every time the tunnel restarts — fine for quick sharing/testing, not a stable long-term link.
+- No Cloudflare account, domain, or DNS setup required for this quick-tunnel mode.
+- The tunnel only stays up while the `cloudflared` process is running; keep it running in the background (e.g. via `nohup`, `tmux`, or a system service) for continuous access.
+- **China reachability isn't guaranteed.** Cloudflare's standard (non-China) edge network is intermittently throttled or blocked by the Great Firewall depending on region/ISP, and this can change over time. Test from an actual China-based network/VPN before relying on it. If it proves unreliable, the durable fix is Cloudflare's China Network (requires an ICP license and an Enterprise plan) or hosting on a CDN/provider with mainland presence.
+- If you later register a domain and add it to Cloudflare, switch to a **named tunnel** (`cloudflared tunnel create <name>` + `cloudflared tunnel route dns <name> <hostname>`) for a permanent, stable URL instead of the random quick-tunnel one.
+
 ## Key Notes
 
 - ES modules throughout (`"type": "module"`) — use `import`/`export`, not `require`.

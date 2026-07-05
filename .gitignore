@@ -5,9 +5,11 @@ Database/maritime.db
 Emails/*.eml
 .DS_Store
 Legacy_Content/maritime_gen1.db
+Legacy_Content/maritime_gen2.db
 Email_Polling/credentials.json
 Email_Polling/token.json
 Information/
 connection.js
 DOCS_ZH.md
 sandbox.js
+Matcher/Email_Whitelist.txt

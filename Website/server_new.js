@@ -62,7 +62,7 @@ const HTML = `<!DOCTYPE html>
   .col-count { font-size: 16px; color: #ffffffff; }
   .col-body { overflow-y: auto; overflow-x: hidden; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
-  th { position: sticky; top: 0; background: #1a1f2e; color: #64748b; font-weight: 500; text-align: left; padding: 8px 8px; border-bottom: 1px solid #2a3044; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; word-break: break-word; }
+  th { position: sticky; top: 0; z-index: 2; background: #1a1f2e; color: #64748b; font-weight: 500; text-align: left; padding: 8px 8px; border-bottom: 1px solid #2a3044; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; word-break: break-word; }
   .sort-btn { background: none; border: none; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; padding: 0; width: 100%; text-align: left; }
   .sort-btn:hover { color: #e2e8f0; }
   .sort-arrow { opacity: .6; }
