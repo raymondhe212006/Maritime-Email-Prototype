@@ -7,3 +7,7 @@ Emails/*.eml
 Legacy_Content/maritime_gen1.db
 Email_Polling/credentials.json
 Email_Polling/token.json
+Information/
+connection.js
+DOCS_ZH.md
+sandbox.js
