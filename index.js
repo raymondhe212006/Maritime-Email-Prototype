@@ -68,7 +68,7 @@ if (POLL_TYPE === 0) {
     }
 
 }
-else if (POLL_TYPE === 1) {
+else if (POLL_TYPE === 1 || POLL_TYPE === 2) {
     async function run() {
         const totalEmails = await pollEmails(-1, POLL_TOTAL_AMO, POLL_TYPE).catch(err => {
             console.error('[main] pollEmails failed:', err);
@@ -128,8 +128,13 @@ else if (POLL_TYPE === 1) {
 
     const scheduleNext = () => {
         if (isWithinPollingHours()) {
+            const nextPoll = new Date(Date.now() + RUN_INTERVAL * 60 * 1000);
+            console.log(`[scheduler] within polling hours, Next poll: ${nextPoll.toString()}`);
             setTimeout(async () => { await run(); scheduleNext(); }, RUN_INTERVAL * 60 * 1000);
+
         } else {
+            const nextPoll = new Date(Date.now() + msUntilNextWindow());
+            console.log(`[scheduler] not within polling hours, Next poll: ${nextPoll.toString()}`);
             setTimeout(scheduleNext, msUntilNextWindow());
         }
     };
@@ -137,6 +142,8 @@ else if (POLL_TYPE === 1) {
     run();
     scheduleNext();
     purgeEmails();
+    const nextPurge = new Date(Date.now() + PURGE_INTERVAL * 60 * 60 * 1000);
+    console.log(`[scheduler] Next Purege: ${nextPurge.toString()}`);
     setInterval(purgeEmails, PURGE_INTERVAL * 60 * 60 * 1000);
 
 }

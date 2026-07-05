@@ -143,8 +143,12 @@ export async function pollEmails(start, number, polltype) {
 
         const gmail = google.gmail({ version: 'v1', auth });
 
+        console.log("[api] Checking Inbox...");
+
         const res = await gmail.users.messages.list({ userId: 'me', maxResults: number, labelIds: ['INBOX'] });
         const messages = res.data.messages || [];
+
+        console.log("[api] Emails found:", messages.length);
 
         for (const message of messages) {
             const msg = await gmail.users.messages.get({ userId: 'me', id: message.id, format: 'raw' });

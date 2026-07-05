@@ -1,5 +1,11 @@
 export const laycan_patterns = ["spot", "prompt", "ppt", "ready"];
 
+const MONTH_INDEX = {
+    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
+    may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7,
+    sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
+};
+
 export const VESSEL_CLASS_ALIASES = {
     handysize: {
         name: "Handysize",
@@ -158,4 +164,38 @@ export function findSizeClasses(minval, maxval) {
     }
 
     return classes.length > 0 ? classes.slice(0, -1) : null;
+}
+
+function matcherSameMonth(laycan) {
+    return laycan.match(/(\d{1,2})\s*(?:-|–|to|\/)\s*(\d{1,2})\s+([A-Za-z]+)/i);
+}
+
+// Eventually add cross month matcher if needed
+
+export function getLaycanStartEnd(laycan, date_sent) {
+    const match = matcherSameMonth(laycan);
+    if (!match) return undefined;
+    let month = undefined;
+    for (const key of Object.keys(MONTH_INDEX)) {
+        if (match[3].toLowerCase().includes(key)) {
+            month = MONTH_INDEX[key]
+        }
+    }
+    if (month !== undefined) {
+        const sentDate = new Date(date_sent);
+        let year = sentDate.getFullYear();
+
+        if (Number(match[1]) > 31 || Number(match[2]) > 31) {
+            return undefined;
+        }
+
+        let start = new Date(Date.UTC(year, month, Number(match[1])));
+        // If the resolved date falls more than a month before the email was sent, assume next year
+        if (start.getTime() < sentDate.getTime() - 30 * 24 * 60 * 60 * 1000) {
+            year += 1;
+            start = new Date(Date.UTC(year, month, Number(match[1])));
+        }
+        let end = new Date(Date.UTC(year, month, Number(match[2])));
+        return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)];
+    }
 }

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
-import { resolveVesselClass, findSizeClasses, laycan_patterns } from '../Personalizations/patterns.js';
+import { resolveVesselClass, findSizeClasses, laycan_patterns, getLaycanStartEnd } from '../Personalizations/patterns.js';
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
@@ -199,6 +199,16 @@ export function correct(result, date_sent) {
                 result.laycanEnd = end_date.toISOString().slice(0, 10);
             }
             break;
+        }
+    }
+
+    // Fill in a bare "D-D Month" (no year) raw laycan when the model didn't compute lcs/lce itself
+    if (result.laycanStart === null && result.laycanEnd === null && result.laycan != null && date_sent != null) {
+        const resolved = getLaycanStartEnd(result.laycan, date_sent);
+        if (resolved) {
+            const [start, end] = resolved;
+            result.laycanStart = start;
+            result.laycanEnd = end;
         }
     }
 
