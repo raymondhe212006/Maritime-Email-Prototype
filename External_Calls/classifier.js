@@ -109,7 +109,12 @@ export async function Second_Pass_Classifier(emails) {
         });
         raw = msg.content[0].text.trim();
         const parsed = JSON.parse(stripMarkdown(raw));
-        const items = Array.isArray(parsed) ? parsed : [parsed];
+        // With a single email in the batch there's no ambiguity about which email a listing
+        // belongs to, so collapse one level in case the model returned one array per listing
+        // (e.g. [[shipA],[shipB]]) instead of one array for the email (e.g. [[shipA,shipB]]).
+        const items = emails.length === 1
+            ? [(Array.isArray(parsed) ? parsed : [parsed]).flat()]
+            : (Array.isArray(parsed) ? parsed : [parsed]);
         return items.map(emailResult => {
             let arr = Array.isArray(emailResult) ? emailResult : [emailResult];
             // flatten accidental extra nesting: [[{...}]] → [{...}]
@@ -202,7 +207,7 @@ export function correct(result, date_sent) {
         }
     }
 
-    // Fill in a bare "D-D Month" (no year) raw laycan when the model didn't compute lcs/lce itself
+    // Try to manually parse laycan raw text if model didn't
     if (result.laycanStart === null && result.laycanEnd === null && result.laycan != null && date_sent != null) {
         const resolved = getLaycanStartEnd(result.laycan, date_sent);
         if (resolved) {
@@ -318,6 +323,7 @@ export async function classify(emails) {
 
                         third_pass_queue.push({
                             message_id: message_id,
+                            sub_id: j,
                             subject: subject,
                             body: body,
                             company: company,

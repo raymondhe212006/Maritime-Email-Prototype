@@ -27,8 +27,38 @@ describe('getLaycanStartEnd', () => {
         assert.equal(end, '2027-01-05');
     });
 
-    test('a laycan with no day-range pattern (e.g. "mid July") returns undefined instead of throwing', () => {
-        assert.equal(getLaycanStartEnd('mid July', '2026-07-02T00:00:00.000Z'), undefined);
+    test('"early July" resolves to the 1st-10th', () => {
+        const [start, end] = getLaycanStartEnd('early July', '2026-07-02T00:00:00.000Z');
+        assert.equal(start, '2026-07-01');
+        assert.equal(end, '2026-07-10');
+    });
+
+    test('"mid July" resolves to the 11th-20th', () => {
+        const [start, end] = getLaycanStartEnd('mid July', '2026-07-02T00:00:00.000Z');
+        assert.equal(start, '2026-07-11');
+        assert.equal(end, '2026-07-20');
+    });
+
+    test('"end July" resolves to the 21st-31st', () => {
+        const [start, end] = getLaycanStartEnd('end July', '2026-07-02T00:00:00.000Z');
+        assert.equal(start, '2026-07-21');
+        assert.equal(end, '2026-07-31');
+    });
+
+    test('"End of July" (with "of") resolves the same as "end July"', () => {
+        const [start, end] = getLaycanStartEnd('End of July', '2026-07-02T00:00:00.000Z');
+        assert.equal(start, '2026-07-21');
+        assert.equal(end, '2026-07-31');
+    });
+
+    test('arbitrary filler text between the keyword and month is accepted', () => {
+        const [start, end] = getLaycanStartEnd('End, cargo ready sometime around July', '2026-07-02T00:00:00.000Z');
+        assert.equal(start, '2026-07-21');
+        assert.equal(end, '2026-07-31');
+    });
+
+    test('a laycan with no day-range or early/mid/end pattern returns undefined instead of throwing', () => {
+        assert.equal(getLaycanStartEnd('sometime soon', '2026-07-02T00:00:00.000Z'), undefined);
     });
 
     test('day 31 is in bounds and resolves normally', () => {

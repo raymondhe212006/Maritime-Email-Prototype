@@ -9,6 +9,7 @@ db.exec(`
     CREATE TABLE IF NOT EXISTS shipments (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         message_id  TEXT,
+        sub_id      TEXT,
         subject     TEXT,
         body        TEXT,
         type        TEXT,
@@ -34,9 +35,9 @@ for (const col of ['size_class TEXT']) {
 
 const insertShipment = db.prepare(`
     INSERT INTO shipments
-        (message_id, subject, body, type, company, date_sent, tonnage_min, tonnage_max, size_class, load_port, load_country, discharge_port, discharge_country, item, laycan, laycanStart, laycanEnd)
+        (message_id, sub_id, subject, body, type, company, date_sent, tonnage_min, tonnage_max, size_class, load_port, load_country, discharge_port, discharge_country, item, laycan, laycanStart, laycanEnd)
     VALUES
-        (@message_id, @subject, @body, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @size_class, @load_port, @load_country, @discharge_port, @discharge_country, @item, @laycan, @laycanStart, @laycanEnd)
+        (@message_id, @sub_id, @subject, @body, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @size_class, @load_port, @load_country, @discharge_port, @discharge_country, @item, @laycan, @laycanStart, @laycanEnd)
 `);
 
 
@@ -51,6 +52,7 @@ export function saveClassifications(queue) {
 
         insertShipment.run({
             message_id: queue[i].message_id,
+            sub_id: queue[i].sub_id,
             subject: subject ?? null,
             body: body,
             type: classifications.type,

@@ -3,3 +3,15 @@
 Example for 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","cgo":"Coal"}],[{"t":"shipping","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"cgo":null}]]
 
 Fields: t (cargo=charterer needs vessel; shipping=owner offers vessel; unknown=S&P/sale/spam/ambiguous), ton.r=tonnage as written, ton.min/max=MT integer range, ton.u=unit, ton.sc=size class, lp=loadPort, dp=dischargePort, lc=laycan as written, lcs/lce=ISO laycan start/end, cgo=cargo. Use null when absent.`
+
+
+
+// this part needed for no mistakes cargo=charterer needs vessel; shipping=owner offers vessel;
+
+
+
+`Maritime classifier. Return ONLY a JSON array (no markdown): one elem per email, each elem an array of shipment objs.
+
+Ex. 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","itm":"Coal"}],[{"t":"vessel","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"itm":"MV Ocean Star"}]]
+
+t: cargo=charterer needs vessel, vessel=owner offers vessel, unknown=S&P/sale/spam/ambiguous. ton: r=raw text, min/max=MT int range, u=unit, sc=size class. lp/dp=load/discharge port. lc=laycan raw, lcs/lce=ISO start/end (for lc="D-D Month" both days share that month). itm: cargo type(cargo)/vessel name(vessel)/null(unknown). Null if absent elsewhere.`;
