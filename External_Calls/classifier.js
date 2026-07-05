@@ -15,7 +15,7 @@ const SECOND_PASS_TEXT = `Maritime classifier. Return ONLY a JSON array (no mark
 
 Ex. 2 emails: [[{"t":"cargo","ton":{"r":"50K","min":48000,"max":52000,"u":"K","sc":null},"lp":"Rotterdam","dp":"Singapore","lc":"1-10 Jul","lcs":"2026-07-01","lce":"2026-07-10","itm":"Coal"}],[{"t":"vessel","ton":{"r":null,"min":null,"max":null,"u":null,"sc":"Panamax"},"lp":"Houston","dp":null,"lc":null,"lcs":null,"lce":null,"itm":"MV Ocean Star"}]]
 
-t: cargo=needs vessel, vessel=offers vessel, unknown=S&P/sale/spam/ambiguous. ton: r=raw text, min/max=MT int range, u=unit, sc=size class. lp/dp=load/discharge port. lc=laycan raw, lcs/lce=ISO start/end (for lc="D-D Month" both days share that month). itm: cargo type(cargo)/vessel name(vessel)/null(unknown). Null if absent elsewhere.`;
+t: cargo=charterer needs vessel, vessel=owner offers vessel, unknown=S&P/sale/spam/ambiguous. ton: r=raw text, min/max=MT int range, u=unit, sc=size class. lp/dp=load/discharge port. lc=laycan raw, lcs/lce=ISO start/end (for lc="D-D Month" both days share that month). itm: cargo type(cargo)/vessel name(vessel)/null(unknown). Null if absent elsewhere.`;
 
 const THIRD_PASS_TEXT = 'Return a JSON array [[loadCountry,dischargeCountry],...] for each numbered port pair. "Unknown" if empty or unrecognizable. No markdown. Example: [["China","Singapore"],["Unknown","Netherlands"]]'
 

@@ -5,3 +5,5 @@ Database/maritime.db
 Emails/*.eml
 .DS_Store
 Legacy_Content/maritime_gen1.db
+Email_Polling/credentials.json
+Email_Polling/token.json

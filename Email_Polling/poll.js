@@ -1,9 +1,16 @@
 import fs from 'fs';
+import path from 'path';
 import 'dotenv/config';
 
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { check_duplicate } from '../Database/db.js';
+import { google } from 'googleapis';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+const TOKEN_PATH = path.join(__dirname, 'token.json');
 
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
@@ -22,6 +29,8 @@ function createImapClient() {
         logger: false
     });
 }
+
+
 
 export async function pollEmails(start, number, polltype) {
     const emails = [];
@@ -117,6 +126,57 @@ export async function pollEmails(start, number, polltype) {
             } catch (err) {
                 console.error('[imap] logout failed:', err.message);
             }
+        }
+    }
+    else if (polltype === 2) {
+        const credentialsRaw = fs.readFileSync(CREDENTIALS_PATH, 'utf8');
+        const tokenRaw = fs.readFileSync(TOKEN_PATH, 'utf8');
+        const credentials = JSON.parse(credentialsRaw);
+        const token = JSON.parse(tokenRaw);
+
+        const auth = new google.auth.OAuth2(
+            credentials.installed.client_id,
+            credentials.installed.client_secret,
+            credentials.installed.redirect_uris[0]
+        );
+        auth.setCredentials(token);
+
+        const gmail = google.gmail({ version: 'v1', auth });
+
+        const res = await gmail.users.messages.list({ userId: 'me', maxResults: number, labelIds: ['INBOX'] });
+        const messages = res.data.messages || [];
+
+        for (const message of messages) {
+            const msg = await gmail.users.messages.get({ userId: 'me', id: message.id, format: 'raw' });
+            const raw = msg.data.raw;
+            const email = await parseEmail(
+                {
+                    id: msg.id,
+                    gmailId: msg.id,
+                    threadId: msg.threadId ?? null,
+                },
+                Buffer.from(raw, 'base64')
+            );
+
+            if (email.from.includes("bulk@argo-oriental.com")) {
+                if (DEBUG_LOGS || LITE_DEBUG) {
+                    console.log("blacklist: " + email.subject);
+                }
+                continue;
+            }
+
+            if (check_duplicate(email.messageId)) {
+                if (DEBUG_LOGS || LITE_DEBUG) {
+                    console.log("duplicate: " + email.subject);
+                }
+                break;
+            }
+
+            if (DEBUG_LOGS) {
+                console.log(`[api] Email: ${email.subject}`);
+            }
+            emails.push(email);
+
         }
     }
 
