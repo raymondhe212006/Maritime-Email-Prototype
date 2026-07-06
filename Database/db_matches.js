@@ -149,9 +149,9 @@ export function checkDuplicate(vessel, cargo) {
         WHERE vessel_uid = @vessel_uid AND vessel_subid = @vessel_subid AND cargo_uid = @cargo_uid AND cargo_subid = @cargo_subid
     `);
     const row = statement.get({
-        vessel_uid: vessel.uid,
+        vessel_uid: vessel.message_id,
         vessel_subid: vessel.sub_id,
-        cargo_uid: cargo.uid,
+        cargo_uid: cargo.message_id,
         cargo_subid: cargo.sub_id,
     });
 
