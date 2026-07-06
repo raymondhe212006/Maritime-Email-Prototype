@@ -29,18 +29,12 @@ db.exec(`
     )
 `);
 
-for (const col of ['size_class TEXT']) {
-    try { db.exec(`ALTER TABLE shipments ADD COLUMN ${col}`); } catch { }
-}
-
 const insertShipment = db.prepare(`
     INSERT INTO shipments
         (message_id, sub_id, subject, body, type, company, date_sent, tonnage_min, tonnage_max, size_class, load_port, load_country, discharge_port, discharge_country, item, laycan, laycanStart, laycanEnd)
     VALUES
         (@message_id, @sub_id, @subject, @body, @type, @company, @date_sent, @tonnage_min, @tonnage_max, @size_class, @load_port, @load_country, @discharge_port, @discharge_country, @item, @laycan, @laycanStart, @laycanEnd)
 `);
-
-
 export function saveClassifications(queue) {
     for (let i = 0; i < queue.length; i++) {
         const subject = queue[i].subject;
@@ -91,19 +85,4 @@ const check_duplicate_sql = db.prepare(`
 export function check_duplicate(message_id) {
     const result = check_duplicate_sql.get(message_id);
     return result;
-}
-
-const correctEqualTonnageStmt = db.prepare(`
-    UPDATE shipments
-    SET
-        tonnage_min = ROUND(tonnage_min * 0.95),
-        tonnage_max = ROUND(tonnage_max * 1.05)
-    WHERE tonnage_min IS NOT NULL
-      AND tonnage_max IS NOT NULL
-      AND tonnage_min = tonnage_max
-`);
-export function correctEqualTonnageRanges() {
-    const result = correctEqualTonnageStmt.run();
-
-    console.log(`[db] corrected ${result.changes} tonnage rows`);
 }

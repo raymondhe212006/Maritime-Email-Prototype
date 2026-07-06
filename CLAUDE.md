@@ -51,6 +51,12 @@ rm Database/maritime.db
 
 The file is gitignored and will be recreated with an empty schema on the next run.
 
+To drop just the `matches` table (e.g. after a schema change) without wiping the rest of the database:
+
+```bash
+node Database/drop_matches.js
+```
+
 ## Testing
 
 After every code change, run `npm test` and iterate until all tests pass before considering the task done.

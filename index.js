@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { pollEmails } from './Email_Polling/poll.js';
 import { saveClassifications, purgeEmails } from './Database/db.js';
+import { match } from './Matcher/matcher.js';
 
 
 const POLL_BATCH_SIZE = Number(process.env.POLL_BATCH_SIZE || 50);
@@ -100,6 +101,10 @@ else if (POLL_TYPE === 1 || POLL_TYPE === 2) {
             totalPolled += batchSize;
             batchStart += batchSize;
         }
+
+        console.log("[main] Running Matcher...");
+        match();
+        console.log("[main] Matcher finished");
     }
 
     // Active window is Beijing workday 8am-5pm, expressed in server-local time
