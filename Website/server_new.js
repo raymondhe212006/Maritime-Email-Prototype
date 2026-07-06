@@ -77,6 +77,8 @@ const HTML = `<!DOCTYPE html>
   .search-field label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
   .search-field input, .search-field select { background: #1a1f2e; border: 1px solid #2a3044; color: #e2e8f0; border-radius: 8px; padding: 6px 14px; font-size: 14px; width: 100%; outline: none; }
   .search-field input:focus, .search-field select:focus { border-color: #3b82f6; }
+  .range-inputs { display: flex; gap: 8px; }
+  .range-inputs input { width: 50%; min-width: 0; }
   .columns { display: flex; height: calc(100vh - 61px - 250px); }
   .col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .col + .col { border-left: 1px solid #1e2533; }
@@ -105,6 +107,7 @@ const HTML = `<!DOCTYPE html>
   th:nth-child(8), td:nth-child(8) { width: 9%; }
   .stack { display: flex; flex-direction: column; gap: 3px; }
   .stack .sub { font-size: 10px; color: #64748b; }
+  .stack .sub.subject { color: #f8fafc; }
   .stack .country { font-size: 12px; color: #94a3b8; }
   .tonnage-cell { align-items: flex-start; gap: 1px; }
   .tonnage-cell .range-symbol { color: #64748b; font-size: 10px; line-height: 1.4; }
@@ -151,7 +154,13 @@ const HTML = `<!DOCTYPE html>
   <div class="search-field"><label>Load Country</label><input id="f-loadcountry" placeholder="e.g. China, Korea" oninput="renderAll()"></div>
   <div class="search-field"><label>Discharge Port</label><input id="f-dischargeport" placeholder="e.g. Singapore, Houston" oninput="renderAll()"></div>
   <div class="search-field"><label>Discharge Country</label><input id="f-dischargecountry" placeholder="e.g. Brazil, India" oninput="renderAll()"></div>
-  <div class="search-field"><label>Tonnage (MT)</label><input id="f-tonnage" placeholder="e.g. 50000, 70000" oninput="renderAll()"></div>
+  <div class="search-field">
+    <label>Tonnage (MT)</label>
+    <div class="range-inputs">
+      <input id="f-tonnage-min" type="number" placeholder="Min e.g. 50000" oninput="renderAll()">
+      <input id="f-tonnage-max" type="number" placeholder="Max e.g. 70000" oninput="renderAll()">
+    </div>
+  </div>
   <div class="search-field"><label>Laycan Date</label><input id="f-laycandate" type="date" oninput="renderAll()"></div>
   <div class="search-field"><label>Company</label><input id="f-company" placeholder="e.g. @exampleemail1.com, @exampleemail2.org" oninput="renderAll()"></div>
   <div class="search-field"><label>Keyword</label><input id="f-keyword" placeholder="e.g. iron ore , coal + aus → ore OR (coal AND aus)" oninput="renderAll()"></div>
@@ -202,8 +211,9 @@ const HTML = `<!DOCTYPE html>
     return v == null ? v : String(v).split('/').join(' / ');
   }
 
-  function stack(top, bottom) {
-    return \`<div class="stack"><div>\${top}</div><div class="sub">\${bottom}</div></div>\`;
+  function stack(top, bottom, extraClass) {
+    const cls = extraClass ? \`sub \${extraClass}\` : 'sub';
+    return \`<div class="stack"><div>\${top}</div><div class="\${cls}">\${bottom}</div></div>\`;
   }
 
   function portStack(port, country) {
@@ -220,8 +230,12 @@ const HTML = `<!DOCTYPE html>
 
   function sentSplit(v) {
     if (!v) return ['<span class="null">—</span>', ''];
-    const [datePart, timePartRaw] = v.split('T');
-    const time = timePartRaw ? timePartRaw.slice(0, 8) + ' UTC' : '';
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return ['<span class="null">—</span>', ''];
+    const shifted = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+    const iso = shifted.toISOString();
+    const datePart = iso.slice(0, 10);
+    const time = iso.slice(11, 19) + ' GMT+8';
     return [n(time), n(datePart)];
   }
 
@@ -290,7 +304,7 @@ const HTML = `<!DOCTYPE html>
     const isOpen = expanded.has(r.id);
     const [sentTime, sentDate] = sentSplit(r.date_sent);
     const cells = [
-      stack(n(r.item), n(r.subject)),
+      stack(n(r.item), n(r.subject), 'subject'),
       portStack(n(r.load_port), n(r.load_country)),
       portStack(n(r.discharge_port), n(r.discharge_country)),
       n(sizeClassText(r.size_class)),
@@ -336,11 +350,14 @@ const HTML = `<!DOCTYPE html>
     return (value || '').toLowerCase().includes(trimmed);
   }
 
-  function matchesTonnage(r, input) {
-    const ts = terms(input).map(Number).filter(v => !isNaN(v));
-    if (!ts.length) return true;
+  function matchesTonnage(r, minInput, maxInput) {
+    const min = minInput === '' ? null : Number(minInput);
+    const max = maxInput === '' ? null : Number(maxInput);
+    if (min == null && max == null) return true;
     if (r.tonnage_min == null || r.tonnage_max == null) return false;
-    return ts.some(v => v >= r.tonnage_min && v <= r.tonnage_max);
+    if (min != null && r.tonnage_max < min) return false;
+    if (max != null && r.tonnage_min > max) return false;
+    return true;
   }
 
   function matchesLaycanDate(r, dateVal) {
@@ -374,7 +391,7 @@ const HTML = `<!DOCTYPE html>
       && matchesAny(r.load_country, fieldVal('f-loadcountry'))
       && matchesAny(r.discharge_port, fieldVal('f-dischargeport'))
       && matchesAny(r.discharge_country, fieldVal('f-dischargecountry'))
-      && matchesTonnage(r, fieldVal('f-tonnage'))
+      && matchesTonnage(r, fieldVal('f-tonnage-min'), fieldVal('f-tonnage-max'))
       && matchesLaycanDate(r, fieldVal('f-laycandate'))
       && matchesAny(r.company, fieldVal('f-company'))
       && matchesKeyword(r, fieldVal('f-keyword'))
@@ -428,7 +445,7 @@ const HTML = `<!DOCTYPE html>
   function entryCells(e, roleHtml) {
     const [sentTime, sentDate] = sentSplit(e.date_sent);
     return [
-      stack(\`\${roleHtml} \${n(e.item)}\`, n(e.subject)),
+      stack(\`\${roleHtml} \${n(e.item)}\`, n(e.subject), 'subject'),
       portStack(n(e.load_port), n(e.load_country)),
       portStack(n(e.discharge_port), n(e.discharge_country)),
       n(sizeClassText(e.size_class)),
