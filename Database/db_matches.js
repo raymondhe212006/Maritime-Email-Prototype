@@ -15,6 +15,16 @@ db.exec(`
   );
 `);
 
+export function purgeMatches() {
+    const purgeOldMatches = db.prepare(`
+        DELETE FROM matches
+        WHERE vessel_date_sent < datetime('now', '-14 days') OR cargo_date_sent < datetime('now', '-14 days')
+    `);
+    const result = purgeOldMatches.run();
+    console.log(`[db] purged ${result.changes} old matches`);
+    return result.changes;
+}
+
 
 export function addMatch(vessel, cargo, leniency, human_review, whitelist_entry) {
     const insertMatch = db.prepare(`

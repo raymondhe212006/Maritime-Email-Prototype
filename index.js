@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { pollEmails } from './Email_Polling/poll.js';
 import { saveClassifications, purgeEmails } from './Database/db.js';
+import { purgeMatches } from './Database/db_matches.js';
 import { match } from './Matcher/matcher.js';
 
 
@@ -148,9 +149,11 @@ else if (POLL_TYPE === 1 || POLL_TYPE === 2) {
     run();
     scheduleNext();
     purgeEmails();
+    purgeMatches();
     const nextPurge = new Date(Date.now() + PURGE_INTERVAL * 60 * 60 * 1000);
-    console.log(`[scheduler] Next Purege: ${nextPurge.toString()}`);
+    console.log(`[scheduler] Next Purge: ${nextPurge.toString()}`);
     setInterval(purgeEmails, PURGE_INTERVAL * 60 * 60 * 1000);
+    setInterval(purgeMatches, PURGE_INTERVAL * 60 * 60 * 1000);
 
 }
 else {
