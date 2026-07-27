@@ -13,7 +13,11 @@ npm run website        # run the dashboard on localhost:3000
 
 ## Architecture
 
+<div align="center">
+
 ![Pipeline diagram](docs/pipeline.svg)
+
+</div>
 
 
 1. **`index.js`** — reads env vars, picks classifier backend (`KEY_TYPE`), runs the poll/classify/save loop, and schedules recurring polls and purges.
