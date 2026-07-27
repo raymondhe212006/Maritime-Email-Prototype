@@ -70,7 +70,7 @@ export function saveClassifications(queue) {
 
 const purgeOldShipments = db.prepare(`
     DELETE FROM shipments
-    WHERE date_sent < datetime('now', '-14 days')
+    WHERE date_sent < datetime('now', '-7 days')
 `);
 export function purgeEmails() {
     const result = purgeOldShipments.run();

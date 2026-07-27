@@ -18,7 +18,7 @@ db.exec(`
 export function purgeMatches() {
     const purgeOldMatches = db.prepare(`
         DELETE FROM matches
-        WHERE vessel_date_sent < datetime('now', '-14 days') OR cargo_date_sent < datetime('now', '-14 days')
+        WHERE vessel_date_sent < datetime('now', '-7 days') OR cargo_date_sent < datetime('now', '-7 days')
     `);
     const result = purgeOldMatches.run();
     console.log(`[db] purged ${result.changes} old matches`);
