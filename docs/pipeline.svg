@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 820" width="560" height="820" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#58a6ff"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="560" height="820" rx="12" fill="#0d1117"/>
+
+  <!-- Title -->
+  <text x="280" y="36" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Email Classification Pipeline</text>
+
+  <!-- ── Box 1: Gmail Inbox ── -->
+  <rect x="155" y="52" width="250" height="52" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1.5"/>
+  <text x="280" y="73" text-anchor="middle" font-size="12" font-weight="600" fill="#79c0ff">Gmail Inbox</text>
+  <text x="280" y="91" text-anchor="middle" font-size="11" fill="#8b949e">IMAP · Gmail API</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="280" y1="104" x2="280" y2="122" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ── Box 2: Email Polling ── -->
+  <rect x="80" y="126" width="400" height="68" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="280" y="148" text-anchor="middle" font-size="12" font-weight="600" fill="#e6edf3">Email Polling</text>
+  <text x="280" y="166" text-anchor="middle" font-size="11" fill="#8b949e">skip bulk senders · stop at known Message-ID</text>
+  <text x="280" y="183" text-anchor="middle" font-size="11" fill="#8b949e">fetch up to POLL_TOTAL_AMO emails</text>
+
+  <!-- Arrow 2→3 -->
+  <line x1="280" y1="194" x2="280" y2="212" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ── Box 3: Pass 1 ── -->
+  <rect x="80" y="216" width="400" height="72" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="280" y="238" text-anchor="middle" font-size="12" font-weight="600" fill="#e6edf3">Pass 1 — First Classifier</text>
+  <text x="280" y="255" text-anchor="middle" font-size="11" fill="#8b949e">Haiku (Anthropic) · Gemini 2.5 Flash</text>
+  <!-- badges -->
+  <rect x="182" y="263" width="82" height="18" rx="9" fill="#1a4726"/>
+  <text x="223" y="276" text-anchor="middle" font-size="10" font-weight="700" fill="#3fb950">MARITIME</text>
+  <rect x="274" y="263" width="104" height="18" rx="9" fill="#2d1f1e"/>
+  <text x="326" y="276" text-anchor="middle" font-size="10" font-weight="700" fill="#f85149">UNKNOWN → discard</text>
+
+  <!-- Arrow 3→4 with label -->
+  <line x1="280" y1="288" x2="280" y2="310" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="208" y="292" width="144" height="16" rx="4" fill="#0d1117"/>
+  <text x="280" y="304" text-anchor="middle" font-size="10" fill="#3fb950" font-weight="600">MARITIME only</text>
+
+  <!-- ── Box 4: Pass 2 ── -->
+  <rect x="80" y="314" width="400" height="80" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="280" y="336" text-anchor="middle" font-size="12" font-weight="600" fill="#e6edf3">Pass 2 — Second Classifier</text>
+  <text x="280" y="353" text-anchor="middle" font-size="11" fill="#8b949e">Sonnet (Anthropic) · Gemini 2.5 Flash</text>
+  <text x="280" y="370" text-anchor="middle" font-size="11" fill="#8b949e">type · tonnage · load/discharge ports</text>
+  <text x="280" y="387" text-anchor="middle" font-size="11" fill="#8b949e">laycan dates · cargo type</text>
+
+  <!-- Arrow 4→5 with label -->
+  <line x1="280" y1="394" x2="280" y2="416" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="192" y="398" width="176" height="16" rx="4" fill="#0d1117"/>
+  <text x="280" y="410" text-anchor="middle" font-size="10" fill="#8b949e" font-style="italic">Anthropic mode only</text>
+
+  <!-- ── Box 5: Pass 3 ── -->
+  <rect x="80" y="420" width="400" height="64" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="280" y="442" text-anchor="middle" font-size="12" font-weight="600" fill="#e6edf3">Pass 3 — Port Resolver</text>
+  <text x="280" y="459" text-anchor="middle" font-size="11" fill="#8b949e">Haiku</text>
+  <text x="280" y="476" text-anchor="middle" font-size="11" fill="#8b949e">port names → countries</text>
+
+  <!-- Arrow 5→6 -->
+  <line x1="280" y1="484" x2="280" y2="502" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ── Box 6: SQLite shipments ── -->
+  <rect x="155" y="506" width="250" height="50" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="280" y="527" text-anchor="middle" font-size="12" font-weight="600" fill="#e6edf3">SQLite · shipments</text>
+  <text x="280" y="547" text-anchor="middle" font-size="11" fill="#8b949e">purged after 7 days</text>
+
+  <!-- Arrow 6→7 -->
+  <line x1="280" y1="556" x2="280" y2="574" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ── Box 7: Matcher ── -->
+  <rect x="80" y="578" width="400" height="76" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="280" y="600" text-anchor="middle" font-size="12" font-weight="600" fill="#e6edf3">Matcher</text>
+  <text x="280" y="617" text-anchor="middle" font-size="11" fill="#8b949e">pairs cargo ↔ vessel by</text>
+  <text x="280" y="634" text-anchor="middle" font-size="11" fill="#8b949e">tonnage overlap · laycan overlap · load country</text>
+  <text x="280" y="647" text-anchor="middle" font-size="10" fill="#6e7681">(whitelist entries use leniency=1, no country check)</text>
+
+  <!-- Arrow 7→8 -->
+  <line x1="280" y1="654" x2="280" y2="672" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ── Box 8: SQLite matches ── -->
+  <rect x="155" y="676" width="250" height="50" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text x="280" y="697" text-anchor="middle" font-size="12" font-weight="600" fill="#e6edf3">SQLite · matches</text>
+  <text x="280" y="717" text-anchor="middle" font-size="11" fill="#8b949e">purged after 7 days</text>
+
+  <!-- Arrow 8→9 -->
+  <line x1="280" y1="726" x2="280" y2="744" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ── Box 9: Dashboard ── -->
+  <rect x="155" y="748" width="250" height="52" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1.5"/>
+  <text x="280" y="769" text-anchor="middle" font-size="12" font-weight="600" fill="#79c0ff">Web Dashboard</text>
+  <text x="280" y="787" text-anchor="middle" font-size="11" fill="#8b949e">localhost:3000</text>
+</svg>

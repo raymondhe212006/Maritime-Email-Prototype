@@ -13,10 +13,8 @@ npm run website        # run the dashboard on localhost:3000
 
 ## Architecture
 
-```
-index.js  →  Email_Polling/poll.js  →  External_Calls/classifier*.js  →  Database/db.js
-                                                                       →  Matcher/matcher.js
-```
+![Pipeline diagram](docs/pipeline.svg)
+
 
 1. **`index.js`** — reads env vars, picks classifier backend (`KEY_TYPE`), runs the poll/classify/save loop, and schedules recurring polls and purges.
 2. **`Email_Polling/poll.js`** — fetches emails from Gmail (IMAP or Gmail API), skipping senders whose address contains `"bulk"` and stopping when a known `Message-ID` is seen.
