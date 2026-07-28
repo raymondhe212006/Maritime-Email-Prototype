@@ -15,8 +15,8 @@ const PURGE_INTERVAL = Number(process.env.PURGE_INTERVAL || 6);
 const KEY_TYPE = Number(process.env.KEY_TYPE || 0);
 let classify;
 if (KEY_TYPE === 0) {
-    const { classify: geminiClassify } = await import('./External_Calls/classifier_gemini.js');
-    classify = geminiClassify;
+    const { classify: localClassify } = await import('./External_Calls/classifier_local.js');
+    classify = localClassify;
 } else if (KEY_TYPE === 1) {
     const { classify: anthropicClassify } = await import('./External_Calls/classifier.js');
     classify = anthropicClassify;

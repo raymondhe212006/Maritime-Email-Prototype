@@ -1,7 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import 'dotenv/config';
 import { resolveVesselClass, findSizeClasses, laycan_patterns, getLaycanStartEnd } from '../Personalizations/patterns.js';
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+const client = new OpenAI({ baseURL: `${OLLAMA_HOST}/v1`, apiKey: 'ollama' });
+const MODEL_FAST = process.env.OLLAMA_MODEL_FAST || 'qwen2.5:7b';
+const MODEL_SMART = process.env.OLLAMA_MODEL_SMART || 'qwen2.5:72b';
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
 const DEBUG_PASS1 = process.env.DEBUG_PASS1 === 'true';
@@ -9,7 +12,14 @@ const CLASSIFY_FIRST_AMO = Number(process.env.CLASSIFY_FIRST_AMO || 50);
 const CLASSIFY_SECOND_AMO = Number(process.env.CLASSIFY_SECOND_AMO || 5);
 const CLASSIFY_THIRD_AMO = Number(process.env.CLASSIFY_THIRD_AMO || 50);
 
-const FIRST_PASS_TEXT = 'Classify each numbered email as "MARITIME" (vessels, cargo) or "UNKNOWN". Return ONLY a JSON array in input order. No markdown. Example: ["MARITIME","UNKNOWN"]'
+const FIRST_PASS_TEXT = `Classify emails as MARITIME or UNKNOWN. Output ONLY a JSON array — no text before or after, no markdown, no explanation.
+
+"MARITIME" = ships, vessels, cargo, ports, tonnage, freight, chartering, laycan, DWT, bulk carrier
+"UNKNOWN" = everything else
+
+Example response for 3 emails: ["MARITIME","UNKNOWN","MARITIME"]
+
+Start your response with [ and end with ]. Nothing else.`
 
 const SECOND_PASS_TEXT = `Maritime classifier. Return ONLY a JSON array (no markdown): one elem per email, each elem an array of shipment objs.
 
@@ -37,18 +47,20 @@ export async function First_Pass_Classifier(emails) {
 
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+        const msg = await client.chat.completions.create({
+            model: MODEL_FAST,
             max_tokens: 10 * emails.length,
             temperature: 0,
-            system: FIRST_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
+            messages: [
+                { role: 'system', content: FIRST_PASS_TEXT },
+                { role: 'user', content: userContent },
+            ],
         });
-        raw = msg.content[0].text.trim();
+        raw = msg.choices[0].message.content.trim();
         return JSON.parse(stripMarkdown(raw));
     } catch (err) {
-        console.error('[classifier] Pass 1 parse failure:', raw || err.message);
-        return emails.map(() => 'UNKNOWN');
+        console.error('[classifier] Pass 1 parse failure, passing all to Pass 2:', raw || err.message);
+        return emails.map(() => 'MARITIME');
     }
 }
 
@@ -99,17 +111,17 @@ export async function Second_Pass_Classifier(emails) {
 
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-sonnet-4-6',
+        const msg = await client.chat.completions.create({
+            model: MODEL_SMART,
             max_tokens: Math.min(8192, 1024 * emails.length),
             temperature: 0,
-            output_config: { effort: 'low' },
-            system: SECOND_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
+            messages: [
+                { role: 'system', content: SECOND_PASS_TEXT },
+                { role: 'user', content: userContent },
+            ],
         });
-        raw = msg.content[0].text.trim();
-        let stripped = stripMarkdown(raw);
-        const parsed = JSON.parse(stripped);
+        raw = msg.choices[0].message.content.trim();
+        const parsed = JSON.parse(stripMarkdown(raw));
         // With a single email in the batch there's no ambiguity about which email a listing
         // belongs to, so collapse one level in case the model returned one array per listing
         // (e.g. [[shipA],[shipB]]) instead of one array for the email (e.g. [[shipA,shipB]]).
@@ -245,14 +257,16 @@ export async function Third_Pass_Classifier(contents) {
 
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+        const msg = await client.chat.completions.create({
+            model: MODEL_FAST,
             max_tokens: 25 * contents.length,
             temperature: 0,
-            system: THIRD_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
+            messages: [
+                { role: 'system', content: THIRD_PASS_TEXT },
+                { role: 'user', content: userContent },
+            ],
         });
-        raw = msg.content[0].text.trim();
+        raw = msg.choices[0].message.content.trim();
         return JSON.parse(stripMarkdown(raw));
     } catch (err) {
         console.error('[classifier] Pass 3 parse failure:', raw || err.message);
