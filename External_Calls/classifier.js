@@ -190,7 +190,10 @@ function secondPassParams(emails) {
 
     return {
         model: 'claude-sonnet-4-6',
-        max_tokens: Math.min(8192, 1024 * emails.length),
+        // Sonnet 4.6 supports up to 128K output; the batch path submits every maritime
+        // email as one request, so the old 8192 cap (sized for 5-email sync chunks) would
+        // truncate output once a run turns up more than ~8 emails' worth of listings.
+        max_tokens: Math.min(128000, 1024 * emails.length),
         temperature: 0,
         output_config: { effort: 'low' },
         system: SECOND_PASS_TEXT,
@@ -391,7 +394,12 @@ export async function Third_Pass_Classifier(contents) {
 }
 
 export async function classify(emails) {
-    const first_chunks = chunk(emails, CLASSIFY_FIRST_AMO);
+    // The Batch API already submits every chunk of a pass as one batch, so splitting into
+    // several chunks only buys anything on the sync fallback (keeps individual synchronous
+    // requests small). Under the Batch API, send every item for a pass in a single request.
+    const chunkForPass = (items, size) => useBatchApi() ? (items.length ? [items] : []) : chunk(items, size);
+
+    const first_chunks = chunkForPass(emails, CLASSIFY_FIRST_AMO);
     if (DEBUG_LOGS) {
         console.log(`[classifier] First Pass: processing ${emails.length} emails in ${first_chunks.length} requests`);
         emails.forEach((email, i) => {
@@ -422,7 +430,7 @@ export async function classify(emails) {
         console.log(`\n\nTotal Maritime Emails to classify: ${second_pass_queue.length}\n\n`);
     }
 
-    const second_chunks = chunk(second_pass_queue, CLASSIFY_SECOND_AMO);
+    const second_chunks = chunkForPass(second_pass_queue, CLASSIFY_SECOND_AMO);
     if (DEBUG_LOGS) {
         console.log(`[classifier] Second Pass: processing ${second_pass_queue.length} emails in ${second_chunks.length} requests`);
         second_pass_queue.forEach((email, i) => {
@@ -472,7 +480,7 @@ export async function classify(emails) {
         console.log(`\n\n Classifying Ports from ${third_pass_queue.length} Entities\n\n`);
     }
 
-    const third_chunks = chunk(third_pass_queue, CLASSIFY_THIRD_AMO);
+    const third_chunks = chunkForPass(third_pass_queue, CLASSIFY_THIRD_AMO);
     if (DEBUG_LOGS) {
         console.log(`[classifier] Third Pass: processing ${third_pass_queue.length} entities in ${third_chunks.length} requests`);
         third_pass_queue.forEach((entity, i) => {

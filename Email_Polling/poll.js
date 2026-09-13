@@ -15,6 +15,29 @@ const TOKEN_PATH = path.join(__dirname, 'token.json');
 const DEBUG_LOGS = process.env.DEBUG_LOGS === 'true';
 const LITE_DEBUG = process.env.LITE_DEBUG === 'true';
 
+const GMAIL_GET_DELAY_MS = Number(process.env.GMAIL_GET_DELAY_MS || 300);
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Gmail's per-user quota is metered per minute, so backoff needs to reach a full
+// minute by the last retry to reliably outlast the throttled window - a few
+// seconds of exponential backoff isn't enough to guarantee the quota reset.
+const GMAIL_QUOTA_BACKOFF_MS = [5000, 15000, 30000, 60000];
+
+async function gmailGetWithBackoff(gmail, messageId) {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'raw' });
+        } catch (err) {
+            const isQuotaError = err?.code === 403 && /Quota exceeded/i.test(err?.message || '');
+            if (!isQuotaError || attempt >= GMAIL_QUOTA_BACKOFF_MS.length) throw err;
+            const backoffMs = GMAIL_QUOTA_BACKOFF_MS[attempt];
+            console.warn(`[api] quota hit, retrying in ${backoffMs}ms (attempt ${attempt + 1}/${GMAIL_QUOTA_BACKOFF_MS.length})`);
+            await sleep(backoffMs);
+        }
+    }
+}
+
 
 function createImapClient() {
     return new ImapFlow({
@@ -151,7 +174,8 @@ export async function pollEmails(start, number, polltype) {
         console.log("[api] Emails found:", messages.length);
 
         for (const message of messages) {
-            const msg = await gmail.users.messages.get({ userId: 'me', id: message.id, format: 'raw' });
+            if (message !== messages[0]) await sleep(GMAIL_GET_DELAY_MS);
+            const msg = await gmailGetWithBackoff(gmail, message.id);
             const raw = msg.data.raw;
             const email = await parseEmail(
                 {
