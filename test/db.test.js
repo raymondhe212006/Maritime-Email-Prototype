@@ -25,6 +25,10 @@ function readEml(name) {
     return fs.readFileSync(path.join(EMAILS, name));
 }
 
+// classify() defaults to the Batch API, which can take up to an hour to return.
+// These tests assert end-to-end persistence, not transport, so run them synchronously.
+process.env.USE_BATCH_API = 'false';
+
 const skipReason = !process.env.ANTHROPIC_API_KEY && 'ANTHROPIC_API_KEY not set';
 
 describe('DB persistence via classify()', { skip: skipReason }, () => {

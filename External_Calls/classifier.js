@@ -8,6 +8,11 @@ const DEBUG_PASS1 = process.env.DEBUG_PASS1 === 'true';
 const CLASSIFY_FIRST_AMO = Number(process.env.CLASSIFY_FIRST_AMO || 50);
 const CLASSIFY_SECOND_AMO = Number(process.env.CLASSIFY_SECOND_AMO || 5);
 const CLASSIFY_THIRD_AMO = Number(process.env.CLASSIFY_THIRD_AMO || 50);
+// Batch API runs asynchronously at 50% cost. Set USE_BATCH_API=false to fall back to
+// sequential synchronous calls when latency matters more than price. Read per call so
+// tests and callers can flip it at runtime.
+const useBatchApi = () => process.env.USE_BATCH_API !== 'false';
+const BATCH_POLL_INTERVAL_MS = Number(process.env.BATCH_POLL_INTERVAL_MS || 15000);
 
 const FIRST_PASS_TEXT = 'Classify each numbered email as "MARITIME" (vessels, cargo) or "UNKNOWN". Return ONLY a JSON array in input order. No markdown. Example: ["MARITIME","UNKNOWN"]'
 
@@ -23,33 +28,130 @@ function stripMarkdown(str) {
     return str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
 }
 
+function messageText(message) {
+    return message.content[0].text.trim();
+}
+
+function chunk(items, size) {
+    const step = Math.max(1, size);
+    const out = [];
+    for (let i = 0; i < items.length; i += step) {
+        out.push(items.slice(i, i + step));
+    }
+    return out;
+}
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Submits every chunk of a pass as one batch, waits for it to finish, and returns the
+// messages in chunk order. Results come back in arbitrary order, so they are keyed by
+// custom_id rather than by position.
+async function runBatch(requests, label) {
+    const batch = await client.messages.batches.create({ requests });
+    if (DEBUG_LOGS || LITE_DEBUG) {
+        console.log(`[classifier] ${label}: submitted batch ${batch.id} (${requests.length} requests)`);
+    }
+
+    let status = batch;
+    while (status.processing_status !== 'ended') {
+        await sleep(BATCH_POLL_INTERVAL_MS);
+        status = await client.messages.batches.retrieve(batch.id);
+        if (DEBUG_LOGS) {
+            console.log(`[classifier] ${label}: ${status.processing_status}, ${status.request_counts.processing} still processing`);
+        }
+    }
+
+    if (DEBUG_LOGS || LITE_DEBUG) {
+        console.log(`[classifier] ${label}: ${status.request_counts.succeeded} succeeded, ${status.request_counts.errored} errored`);
+    }
+
+    const byId = new Map();
+    for await (const entry of await client.messages.batches.results(batch.id)) {
+        if (entry.result.type === 'succeeded') {
+            byId.set(entry.custom_id, entry.result.message);
+        } else {
+            console.error(`[classifier] ${label}: ${entry.custom_id} ${entry.result.type}`);
+            byId.set(entry.custom_id, null);
+        }
+    }
+    return byId;
+}
+
+// Runs one pass over its chunks and returns an array of messages aligned with `chunks`.
+// A null entry means that chunk has no usable response; the pass decoder turns it into
+// that pass's fallback, so one bad chunk never takes down the run.
+async function runPass(chunks, buildParams, label) {
+    if (chunks.length === 0) return [];
+
+    if (!useBatchApi()) {
+        const messages = [];
+        for (const items of chunks) {
+            try {
+                messages.push(await client.messages.create(buildParams(items)));
+            } catch (err) {
+                console.error(`[classifier] ${label} request failed:`, err.message);
+                messages.push(null);
+            }
+        }
+        return messages;
+    }
+
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const requests = chunks.map((items, i) => ({
+        custom_id: `${slug}-${i}`,
+        params: buildParams(items),
+    }));
+
+    try {
+        const byId = await runBatch(requests, label);
+        return requests.map(request => byId.get(request.custom_id) ?? null);
+    } catch (err) {
+        console.error(`[classifier] ${label} batch failed:`, err.message);
+        return chunks.map(() => null);
+    }
+}
+
 function parse_first(result) {
     if (!Array.isArray(result)) return [];
     return result.map(v => (typeof v === 'string' && v.toUpperCase() === 'MARITIME') ? 'MARITIME' : 'UNKNOWN');
 }
 
-export async function First_Pass_Classifier(emails) {
+function firstPassParams(emails) {
     let userContent = "";
     for (let i = 0; i < emails.length; i++) {
         const preview = (emails[i].bodyText || '').slice(0, 100);
         userContent += `${i + 1}. Subject: ${emails[i].subject}\nBody: ${preview}\n\n`;
     }
 
+    return {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 10 * emails.length,
+        temperature: 0,
+        system: FIRST_PASS_TEXT,
+        messages: [{ role: 'user', content: userContent }],
+    };
+}
+
+function decodeFirstPass(message, emails) {
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 10 * emails.length,
-            temperature: 0,
-            system: FIRST_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
-        });
-        raw = msg.content[0].text.trim();
+        if (!message) throw new Error('no batch result');
+        raw = messageText(message);
         return JSON.parse(stripMarkdown(raw));
     } catch (err) {
         console.error('[classifier] Pass 1 parse failure:', raw || err.message);
         return emails.map(() => 'UNKNOWN');
     }
+}
+
+export async function First_Pass_Classifier(emails) {
+    let message = null;
+    try {
+        message = await client.messages.create(firstPassParams(emails));
+    } catch (err) {
+        console.error('[classifier] Pass 1 request failed:', err.message);
+    }
+    return decodeFirstPass(message, emails);
 }
 
 function normalizeSecondPassResult(parsed) {
@@ -78,7 +180,7 @@ function parse_second(result) {
     return result;
 }
 
-export async function Second_Pass_Classifier(emails) {
+function secondPassParams(emails) {
     let userContent = "";
     for (let i = 0; i < emails.length; i++) {
         const subject = emails[i].subject || '';
@@ -86,6 +188,17 @@ export async function Second_Pass_Classifier(emails) {
         userContent += `${i + 1}. Subject: ${subject}\nBody:\n${preview}\n\n`;
     }
 
+    return {
+        model: 'claude-sonnet-4-6',
+        max_tokens: Math.min(8192, 1024 * emails.length),
+        temperature: 0,
+        output_config: { effort: 'low' },
+        system: SECOND_PASS_TEXT,
+        messages: [{ role: 'user', content: userContent }],
+    };
+}
+
+function decodeSecondPass(message, emails) {
     const fallback = emails.map(() => [{
         type: 'unknown',
         tonnage: { valueMin: null, valueMax: null, unit: null, raw: null, sizeClass: null },
@@ -99,15 +212,8 @@ export async function Second_Pass_Classifier(emails) {
 
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-sonnet-4-6',
-            max_tokens: Math.min(8192, 1024 * emails.length),
-            temperature: 0,
-            output_config: { effort: 'low' },
-            system: SECOND_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
-        });
-        raw = msg.content[0].text.trim();
+        if (!message) throw new Error('no batch result');
+        raw = messageText(message);
         let stripped = stripMarkdown(raw);
         const parsed = JSON.parse(stripped);
         // With a single email in the batch there's no ambiguity about which email a listing
@@ -126,6 +232,16 @@ export async function Second_Pass_Classifier(emails) {
         console.error('[classifier] Pass 2 parse failure:', raw || err.message);
         return fallback;
     }
+}
+
+export async function Second_Pass_Classifier(emails) {
+    let message = null;
+    try {
+        message = await client.messages.create(secondPassParams(emails));
+    } catch (err) {
+        console.error('[classifier] Pass 2 request failed:', err.message);
+    }
+    return decodeSecondPass(message, emails);
 }
 
 
@@ -237,22 +353,26 @@ function parse_third(result) {
     });
 }
 
-export async function Third_Pass_Classifier(contents) {
+function thirdPassParams(contents) {
     let userContent = "";
     for (let i = 0; i < contents.length; i++) {
         userContent += `${i + 1}. Load: ${contents[i].classifications.loadPort}\n Discharge: ${contents[i].classifications.dischargePort}\n\n`;
     }
 
+    return {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 25 * contents.length,
+        temperature: 0,
+        system: THIRD_PASS_TEXT,
+        messages: [{ role: 'user', content: userContent }],
+    };
+}
+
+function decodeThirdPass(message, contents) {
     let raw;
     try {
-        const msg = await client.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 25 * contents.length,
-            temperature: 0,
-            system: THIRD_PASS_TEXT,
-            messages: [{ role: 'user', content: userContent }],
-        });
-        raw = msg.content[0].text.trim();
+        if (!message) throw new Error('no batch result');
+        raw = messageText(message);
         return JSON.parse(stripMarkdown(raw));
     } catch (err) {
         console.error('[classifier] Pass 3 parse failure:', raw || err.message);
@@ -260,28 +380,37 @@ export async function Third_Pass_Classifier(contents) {
     }
 }
 
+export async function Third_Pass_Classifier(contents) {
+    let message = null;
+    try {
+        message = await client.messages.create(thirdPassParams(contents));
+    } catch (err) {
+        console.error('[classifier] Pass 3 request failed:', err.message);
+    }
+    return decodeThirdPass(message, contents);
+}
+
 export async function classify(emails) {
-    let first_chunk = [];
-    let second_pass_queue = [];
-    for (let i = 0; i < emails.length; i++) {
-        first_chunk.push(emails[i]);
-        if ((i != 0 && i % CLASSIFY_FIRST_AMO === 0) || i == emails.length - 1) {
-            if (DEBUG_LOGS) {
-                console.log(`[classifier] First Pass: processing ${first_chunk.length} emails`);
-                first_chunk.forEach((email, i) => {
-                    console.log(`#${i + 1}: ${email.subject}`);
-                });
+    const first_chunks = chunk(emails, CLASSIFY_FIRST_AMO);
+    if (DEBUG_LOGS) {
+        console.log(`[classifier] First Pass: processing ${emails.length} emails in ${first_chunks.length} requests`);
+        emails.forEach((email, i) => {
+            console.log(`#${i + 1}: ${email.subject}`);
+        });
+    }
+    const first_messages = await runPass(first_chunks, firstPassParams, 'Pass 1');
+
+    const second_pass_queue = [];
+    for (let c = 0; c < first_chunks.length; c++) {
+        const first_chunk = first_chunks[c];
+        const result = parse_first(decodeFirstPass(first_messages[c], first_chunk));
+        if (DEBUG_LOGS) {
+            console.log(result);
+        }
+        for (let j = 0; j < Math.min(result.length, first_chunk.length); j++) {
+            if (result[j] === 'MARITIME') {
+                second_pass_queue.push(first_chunk[j]);
             }
-            const result = parse_first(await First_Pass_Classifier(first_chunk));
-            if (DEBUG_LOGS) {
-                console.log(result);
-            }
-            for (let j = 0; j < Math.min(result.length, first_chunk.length); j++) {
-                if (result[j] === 'MARITIME') {
-                    second_pass_queue.push(first_chunk[j]);
-                }
-            }
-            first_chunk = [];
         }
     }
 
@@ -293,52 +422,48 @@ export async function classify(emails) {
         console.log(`\n\nTotal Maritime Emails to classify: ${second_pass_queue.length}\n\n`);
     }
 
-    let second_chunk = [];
-    let third_pass_queue = []
-    for (let i = 0; i < second_pass_queue.length; i++) {
-        second_chunk.push(second_pass_queue[i]);
+    const second_chunks = chunk(second_pass_queue, CLASSIFY_SECOND_AMO);
+    if (DEBUG_LOGS) {
+        console.log(`[classifier] Second Pass: processing ${second_pass_queue.length} emails in ${second_chunks.length} requests`);
+        second_pass_queue.forEach((email, i) => {
+            console.log(`#${i + 1}: ${email.subject}`);
+        });
+    }
+    const second_messages = await runPass(second_chunks, secondPassParams, 'Pass 2');
 
-        if ((i != 0 && i % CLASSIFY_SECOND_AMO === 0) || i == second_pass_queue.length - 1) {
-            if (DEBUG_LOGS) {
-                console.log(`[classifier] Second Pass: processing ${second_chunk.length} emails`);
-                second_chunk.forEach((email, i) => {
-                    console.log(`#${i + 1}: ${email.subject}`);
-                });
+    const third_pass_queue = [];
+    for (let c = 0; c < second_chunks.length; c++) {
+        const second_chunk = second_chunks[c];
+        const result = parse_second(decodeSecondPass(second_messages[c], second_chunk));
+
+        for (let i = 0; i < Math.min(result.length, second_chunk.length); i++) {
+            const message_id = second_chunk[i].messageId;
+            const subject = second_chunk[i].subject;
+            const body = second_chunk[i].bodyText;
+            let company = '@' + second_chunk[i].from.split('@')[1];
+            if (company[company.length - 1] === ">") {
+                company = company.slice(0, -1);
             }
+            const date_sent = second_chunk[i].date
 
-            const result = parse_second(await Second_Pass_Classifier(second_chunk));
+            for (let j = 0; j < result[i].length; j++) {
+                if (result[i][j].type != "unknown") {
+                    correct(result[i][j], date_sent);
 
-            for (let i = 0; i < Math.min(result.length, second_chunk.length); i++) {
-                const message_id = second_chunk[i].messageId;
-                const subject = second_chunk[i].subject;
-                const body = second_chunk[i].bodyText;
-                let company = '@' + second_chunk[i].from.split('@')[1];
-                if (company[company.length - 1] === ">") {
-                    company = company.slice(0, -1);
-                }
-                const date_sent = second_chunk[i].date
-
-                for (let j = 0; j < result[i].length; j++) {
-                    if (result[i][j].type != "unknown") {
-                        correct(result[i][j], date_sent);
-
-                        third_pass_queue.push({
-                            message_id: message_id,
-                            sub_id: j,
-                            subject: subject,
-                            body: body,
-                            company: company,
-                            time_sent: date_sent,
-                            classifications: result[i][j],
-                        });
-                    }
+                    third_pass_queue.push({
+                        message_id: message_id,
+                        sub_id: j,
+                        subject: subject,
+                        body: body,
+                        company: company,
+                        time_sent: date_sent,
+                        classifications: result[i][j],
+                    });
                 }
             }
-            if (DEBUG_LOGS) {
-                console.log(JSON.stringify(result, null, 2));
-            }
-            second_chunk = [];
-
+        }
+        if (DEBUG_LOGS) {
+            console.log(JSON.stringify(result, null, 2));
         }
     }
 
@@ -347,29 +472,27 @@ export async function classify(emails) {
         console.log(`\n\n Classifying Ports from ${third_pass_queue.length} Entities\n\n`);
     }
 
-    let thrid_chunk = []
-    let db_queue = []
-    for (let i = 0; i < third_pass_queue.length; i++) {
-        thrid_chunk.push(third_pass_queue[i]);
-        if ((i != 0 && i % CLASSIFY_THIRD_AMO === 0) || i == third_pass_queue.length - 1) {
-            if (DEBUG_LOGS) {
-                console.log(`[classifier] Third Pass: processing ${thrid_chunk.length} emails`);
-                thrid_chunk.forEach((email, i) => {
-                    console.log(`#${i + 1}: ${email.subject}`);
-                });
-            }
-            const result = parse_third(await Third_Pass_Classifier(thrid_chunk));
-            if (DEBUG_LOGS) {
-                console.log(result);
-            }
-            for (let j = 0; j < Math.min(result.length, thrid_chunk.length); j++) {
-                thrid_chunk[j].classifications.loadCountry = result[j][0]
-                thrid_chunk[j].classifications.dischargeCountry = result[j][1]
-                db_queue.push(thrid_chunk[j]);
-            }
-            thrid_chunk = [];
-        }
+    const third_chunks = chunk(third_pass_queue, CLASSIFY_THIRD_AMO);
+    if (DEBUG_LOGS) {
+        console.log(`[classifier] Third Pass: processing ${third_pass_queue.length} entities in ${third_chunks.length} requests`);
+        third_pass_queue.forEach((entity, i) => {
+            console.log(`#${i + 1}: ${entity.subject}`);
+        });
+    }
+    const third_messages = await runPass(third_chunks, thirdPassParams, 'Pass 3');
 
+    const db_queue = []
+    for (let c = 0; c < third_chunks.length; c++) {
+        const third_chunk = third_chunks[c];
+        const result = parse_third(decodeThirdPass(third_messages[c], third_chunk));
+        if (DEBUG_LOGS) {
+            console.log(result);
+        }
+        for (let j = 0; j < Math.min(result.length, third_chunk.length); j++) {
+            third_chunk[j].classifications.loadCountry = result[j][0]
+            third_chunk[j].classifications.dischargeCountry = result[j][1]
+            db_queue.push(third_chunk[j]);
+        }
     }
 
     return db_queue
